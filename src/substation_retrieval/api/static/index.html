@@ -82,10 +82,11 @@
 
   <!-- ONTOLOGY -->
   <section id="tab-ontology" class="tab">
-    <div class="grid2">
-      <div class="card"><h3>Class tree <span class="muted">(instances in the graph)</span></h3><div id="onto-tree"></div></div>
-      <div class="card"><h3>Ontology graph</h3><svg id="onto-svg" class="graph"></svg>
-        <div id="onto-meta" class="muted small"></div></div>
+    <div class="card">
+      <div class="row"><h3>Ontology</h3><span class="muted small">5 families · click a group to fold it · click any class for its fields and usage · (n) = instances in the graph</span>
+        <span class="spacer"></span><button class="btn" id="onto-expand">Expand all</button><button class="btn" id="onto-collapse">Families only</button></div>
+      <div class="tree-layout"><div id="onto-tree" class="tree-wrap"></div><div id="onto-info" class="info small muted">Select a class.</div></div>
+      <div id="onto-meta" class="muted small"></div>
     </div>
   </section>
 
@@ -93,13 +94,17 @@
   <section id="tab-site" class="tab">
     <div class="card row">
       <select id="site-doc"></select>
-      <label><input type="checkbox" id="hide-concepts"> hide ontology classes</label>
-      <label><input type="checkbox" id="hide-layouts" checked> hide layouts</label>
+      <select id="site-view"><option value="tree">Design graph (tree)</option><option value="network">Network</option></select>
+      <span id="net-opts"><label><input type="checkbox" id="hide-concepts" checked> hide ontology classes</label>
+      <label><input type="checkbox" id="hide-layouts" checked> hide layouts</label></span>
       <span class="spacer"></span><span id="site-meta" class="muted"></span>
     </div>
+    <div class="card">
+      <div class="tree-layout"><div id="site-graph" class="tree-wrap"></div><div id="node-info" class="info small muted">Click a box to see the graph vertex behind it.</div></div>
+    </div>
     <div class="grid2">
-      <div class="card"><h3>Knowledge graph of this site</h3><svg id="site-svg" class="graph tall"></svg><div id="node-info" class="small"></div></div>
-      <div class="card"><h3>Extracted geometry</h3><div id="site-geom"></div><h3>Debug artifacts</h3><div id="site-art" class="gallery"></div></div>
+      <div class="card"><h3>Extracted geometry</h3><div id="site-geom"></div></div>
+      <div class="card"><h3>Drawing with extracted masks</h3><div id="site-art"></div></div>
     </div>
   </section>
 

@@ -23,6 +23,11 @@ from ..retrieval.scoring import Result, conflicts_of, feature_score, geometry_ev
 
 TOKEN = re.compile(r"[a-z0-9]+(?:\.[0-9]+)?")
 STOP = set("the a an of and or to in on for with at by from is are be as this that it its into".split())
+# words the structured parser already scores (equipment, counts, generic CSS words) are dropped from the BM25
+# query so free text only adds what the fields do not capture (project names, special notes)
+DOMAIN = set("""css substation substations transformer transformers dt dts dtr rmu rmus ltp ltps lt ht panel panels kva way ways
+room rooms get me need want find show give design designs layout layouts similar like one two three four five six nos no
+indoor outdoor floor ground stilt basement podium first second terrace open sky to x with without""".split())
 
 
 def tokens(s: str) -> list[str]:
@@ -56,10 +61,11 @@ class BM25:
 class RAGEngine:
     name = "rag"
 
-    def __init__(self, index, settings, embedder=None):
+    def __init__(self, index, settings, embedder=None, image_embedder=None):
         self.index = index
         self.settings = settings
         self.embedder = embedder
+        self.image_embedder = image_embedder
         self._version = -1
         self._subs: list[dict] = []
         self._bm25: BM25 | None = None
@@ -75,7 +81,9 @@ class RAGEngine:
 
     def health(self) -> dict:
         self._refresh()
-        return {"ok": bool(self._subs), "substations": len(self._subs), "embedding": self.embedder is not None}
+        return {"ok": bool(self._subs), "substations": len(self._subs), "embedding": self.embedder is not None,
+                "image_embedder": getattr(self.image_embedder, "name", None),
+                "image_embeddings_indexed": sum(1 for s in self._subs if s.get("img_embedding") is not None)}
 
     def search(self, q: dict, k: int = 10) -> tuple[list[Result], dict]:
         t0 = time.time()
@@ -88,8 +96,9 @@ class RAGEngine:
         n = len(self._subs)
         comps: dict[str, np.ndarray] = {}
         text = q.get("text") or ""
-        if text.strip():
-            bm = self._bm25.scores(text)
+        residual = " ".join(t for t in tokens(text) if t not in DOMAIN and not t.replace(".", "").isdigit())
+        if residual.strip():
+            bm = self._bm25.scores(residual)
             comps["text"] = bm / bm.max() if bm.max() > 0 else bm
         fs = [feature_score(q, s["features"]) for s in self._subs]
         if any(f[0] is not None for f in fs):
@@ -97,6 +106,13 @@ class RAGEngine:
         if qg.outline is not None:
             qr, _ = R.rasterise(qg)
             comps["raster"] = np.array([R.raster_similarity(qr, r) for r in self._rasters])
+            if self.image_embedder is not None and qr is not None and any(s.get("img_embedding") is not None for s in self._subs):
+                try:
+                    qe = self.image_embedder.embed_poses(qr)            # 8 poses x d
+                    comps["image_embedding"] = np.array([float(np.max(qe @ s["img_embedding"])) if s.get("img_embedding") is not None
+                                                         else 0.0 for s in self._subs])
+                except Exception:
+                    pass
         if self.embedder is not None and text.strip():
             try:
                 qe = np.asarray(self.embedder([text])[0], np.float32)

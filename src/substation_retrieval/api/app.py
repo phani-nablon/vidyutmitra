@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -49,10 +49,18 @@ def _watch_loop(sv, stop: threading.Event):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    sv = get_services()
+    import asyncio
+    # gremlinpython runs its own event loop: build the services (and the JanusGraph connection) off the server loop
+    sv = await asyncio.to_thread(get_services)
     sv.ingest.start_workers(int(sv.settings.get("server.workers_in_process", 1)))
     app.state.chat = ChatAgent(sv)
     stop = threading.Event()
+    def _warm():
+        try:
+            log.info("KG cache warmed: %s partitions", sv.kg.warm())
+        except Exception as e:  # graph down: auto mode falls back to RAG
+            log.warning("KG warm-up skipped: %s", e)
+    threading.Thread(target=_warm, daemon=True, name="kg-warm").start()
     if sv.settings.get("server.watch_folder"):
         threading.Thread(target=_watch_loop, args=(sv, stop), daemon=True, name="watch").start()
     yield
@@ -305,6 +313,92 @@ def document_graph(doc_id: str):
     return {"doc_id": doc_id, "nodes": nodes, "edges": part["edges"]}
 
 
+@app.get("/api/documents/{doc_id}/page/{page}.jpg")
+def document_page(doc_id: str, page: int = 1):
+    from .images import page_jpeg
+    b = page_jpeg(get_services().settings, _doc(doc_id), page)
+    if b is None:
+        raise HTTPException(404, "no page image for this drawing")
+    return Response(b, media_type="image/jpeg", headers={"Cache-Control": "max-age=3600"})
+
+
+@app.get("/api/documents/{doc_id}/layout/{layout_id}.jpg")
+def document_layout(doc_id: str, layout_id: str):
+    from .images import layout_crop
+    b = layout_crop(get_services().settings, _doc(doc_id), layout_id)
+    if b is None:
+        raise HTTPException(404, "no image for this layout")
+    return Response(b, media_type="image/jpeg", headers={"Cache-Control": "max-age=3600"})
+
+
+@app.get("/api/documents/{doc_id}/masks/{page}.jpg")
+def document_masks(doc_id: str, page: int = 1, classes: Optional[str] = None, layout: Optional[str] = None):
+    from .images import mask_overlay
+    cl = set(classes.split(",")) if classes else None
+    b = mask_overlay(get_services().settings, _doc(doc_id), page, cl, layout_id=layout)
+    if b is None:
+        raise HTTPException(404, "no page image for this drawing")
+    return Response(b, media_type="image/jpeg")
+
+
+@app.get("/api/documents/{doc_id}/mask/{page}/{cls}.png")
+def document_mask(doc_id: str, page: int, cls: str):
+    from .images import binary_mask
+    b = binary_mask(get_services().settings, _doc(doc_id), page, cls)
+    if b is None:
+        raise HTTPException(404)
+    return Response(b, media_type="image/png")
+
+
+@app.get("/api/documents/{doc_id}/summary")
+def document_summary(doc_id: str):
+    """Site summary for the Site tab: metadata, substations, equipment, heights, site features, masks."""
+    from .images import mask_classes
+    d = _doc(doc_id)
+    md = d.get("metadata") or {}
+    subs = []
+    for s_ in d.get("substations", []):
+        civ = s_["civil"]
+        eq = s_["electrical"]["equipment"]
+        subs.append({"id": s_["id"], "name": s_.get("name"), "floor": s_.get("floor"), "counts": s_.get("counts"),
+                     "kva": [e["kva"] for e in eq if e.get("kva")],
+                     "kva_from_catalogue": sum(1 for e in eq if e.get("kva_source") == "catalogue_unique"),
+                     "length_mm": civ.get("length_mm"), "width_mm": civ.get("width_mm"), "area_m2": civ.get("area_m2"),
+                     "shape": civ.get("shape"), "clear_height_mm": civ.get("clear_height_mm"), "slab_to_soffit_mm": civ.get("slab_to_soffit_mm"),
+                     "beam_bottom_mm": civ.get("beam_bottom_mm"), "plinth_mm": civ.get("plinth_mm"), "trench_depth_mm": civ.get("trench_depth_mm"),
+                     "doors": [f'{o["type"]} {round(o["width_mm"]) if o.get("width_mm") else ""}'.strip() for o in s_["access"]["openings"]],
+                     "n_louvres": len(s_["ventilation"]["openings"]), "n_cutouts": len(s_["cable"].get("cutouts", [])),
+                     "n_beams": sum(1 for x in civ.get("structures", []) if x.get("type") == "beam"),
+                     "n_routes": len(s_["cable"].get("routes", [])), "mm_per_px": s_.get("mm_per_px"),
+                     "equipment_layout_id": s_.get("equipment_layout_id"), "section_layout_id": s_.get("section_layout_id"),
+                     "section_reason": s_.get("section_reason")})
+    site = d.get("site") or {}
+    feats: dict[str, int] = {}
+    for f in site.get("features", []):
+        feats[f.get("cls") or "other"] = feats.get(f.get("cls") or "other", 0) + 1
+    pages = sorted({int(p.get("page", 1)) for p in (d["source"].get("page_images") or [])}) or [1]
+    return {"doc_id": doc_id, "file_name": d["source"]["file_name"], "method": (d.get("provenance") or {}).get("method"),
+            "quality": d.get("quality"), "metadata": {k: md.get(k) for k in ("installation", "arrangement", "context", "floor",
+            "location_in_building", "voltage_kv", "substation_count", "multiple_substations", "kind")},
+            "substations": subs, "site": {"layout_id": site.get("layout_id"), "scaled": bool(site.get("mm_per_px")), "features": feats,
+            "clearance_checks": site.get("clearance_checks", [])},
+            "layouts": [{"id": L["id"], "type": L.get("type"), "title": L.get("title"), "page": L.get("page"),
+                         "scale": L.get("scale_source"), "mm_per_px": L.get("mm_per_px")} for L in d.get("layouts", [])],
+            "pages": pages, "mask_classes": mask_classes(d)}
+
+
+@app.get("/api/documents/{doc_id}/tree")
+def document_tree(doc_id: str):
+    """The site's graph as the left-to-right design tree (original Design graph view)."""
+    from .trees import design_tree
+    sv = get_services()
+    part = sv.store.partition(doc_id)
+    if not part["vertices"]:
+        raise HTTPException(404, "document not in the graph")
+    d = sv.index.document(doc_id) or {}
+    return design_tree(part, d.get("file_name") or doc_id)
+
+
 @app.post("/api/documents/{doc_id}/approve")
 def approve(doc_id: str):
     return get_services().ingest.approve(doc_id)
@@ -351,7 +445,8 @@ def ontology():
         sc = sv.store.schema_counts()
     except Exception:
         sc = {"vertices": {}, "edges": {}}
-    return {"tree": to_tree(ONTOLOGY, counts), "vertex_counts": sc.get("vertices"), "edge_counts": sc.get("edges"),
+    from .trees import ontology_tree
+    return {"tree": to_tree(ONTOLOGY, counts), "view": ontology_tree(counts), "vertex_counts": sc.get("vertices"), "edge_counts": sc.get("edges"),
             "vertex_labels": ["document", "layout", "substation", "equipment", "opening", "structure", "route", "site_feature",
                               "concept", "facet", "catalogue_item"],
             "edge_labels": ["HAS_LAYOUT", "HAS_SUBSTATION", "HAS_FEATURE", "SECTION_OF", "DRAWN_IN", "CONTAINS", "ON_WALL", "UNDER",

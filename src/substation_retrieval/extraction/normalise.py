@@ -86,6 +86,10 @@ def substation_from_px(raw: dict, idx: int, default_scale: float | None = None) 
     if g is None and L and B:
         civ["polygon_mm"] = P.rect(0, 0, L, B)
         g = P.poly(civ["polygon_mm"])
+    if rb:
+        civ["bbox_px"] = list(rb)
+    if room.get("polygon"):
+        civ["polygon_px"] = room["polygon"]
     civ.update({
         "length_mm": L, "width_mm": B,
         "area_m2": num(room.get("area_m2")) or (round(g.area / 1e6, 2) if g is not None else None),
@@ -120,6 +124,7 @@ def substation_from_px(raw: dict, idx: int, default_scale: float | None = None) 
             "weight_kg": catalogue.parse_weight_kg(e.get("weight") if e.get("weight") is not None else e.get("weight_kg")),
             "centre_mm": centre, "polygon_mm": poly, "ceiling_clearance_mm": num(e.get("ceiling_clearance_mm")),
             "note": e.get("note"), "contains": e.get("contains"),
+            "bbox_px": e.get("bbox") if e.get("bbox") and len(e.get("bbox")) == 4 else None,
         })
 
     access, vent, routes, cutouts, entries = [], [], [], [], []
@@ -129,7 +134,7 @@ def substation_from_px(raw: dict, idx: int, default_scale: float | None = None) 
         poly = o.get("polygon_mm") or (P.bbox_px_to_mm(b, origin, s) if (b and len(b) == 4 and s) else None)
         meas = o.get("measured_mm") or []
         width = num(o.get("width_mm")) or (max(meas) if meas else None)
-        rec = {"id": f"O{i + 1}", "type": t, "label": o.get("label"), "width_mm": width,
+        rec = {"id": f"O{i + 1}", "type": t, "label": o.get("label"), "width_mm": width, "bbox_px": b if (b and len(b) == 4) else None,
                "height_mm": num(o.get("height_mm")), "polygon_mm": poly, "wall": o.get("wall") or _wall_of(poly, Lx, By)}
         if poly:
             gg = P.poly(poly)
@@ -143,14 +148,14 @@ def substation_from_px(raw: dict, idx: int, default_scale: float | None = None) 
         elif t == "cutout":
             cutouts.append(rec)
         elif t == "trench":
-            routes.append({"id": f"R{i + 1}", "type": "trench", "kind": _trench_kind(o.get("label")),
+            routes.append({"id": f"R{i + 1}", "type": "trench", "kind": _trench_kind(o.get("label")), "bbox_px": rec["bbox_px"],
                            "polygon_mm": poly, "label": o.get("label"), "width_mm": width,
                            "depth_mm": num(o.get("depth_mm"))})
         elif t == "beam":
-            civ["structures"].append({"id": f"S{i + 1}", "type": "beam", "polygon_mm": poly, "label": o.get("label"),
+            civ["structures"].append({"id": f"S{i + 1}", "type": "beam", "polygon_mm": poly, "label": o.get("label"), "bbox_px": rec["bbox_px"],
                                       "bottom_mm": num(o.get("bottom_mm")) or civ.get("beam_bottom_mm")})
         elif t == "column":
-            civ["structures"].append({"id": f"S{i + 1}", "type": "column", "polygon_mm": poly, "label": o.get("label")})
+            civ["structures"].append({"id": f"S{i + 1}", "type": "column", "polygon_mm": poly, "label": o.get("label"), "bbox_px": rec["bbox_px"]})
         elif t == "platform":
             civ.setdefault("platform", {}).update({"label": o.get("label")})
         elif t in ("shaft", "cable_riser"):
@@ -163,7 +168,7 @@ def substation_from_px(raw: dict, idx: int, default_scale: float | None = None) 
     clearances += [{"a": c.get("a"), "b": c.get("b"), "mm": c.get("gap_mm"), "relation": c.get("relation"), "source": "geometry"}
                    for c in (raw.get("clearances_geometric") or [])]
     return {
-        "id": f"S{idx + 1}", "name": raw.get("name") or f"CSS-{idx + 1}",
+        "id": f"S{idx + 1}", "name": raw.get("name") or f"CSS-{idx + 1}", "page": raw.get("page") or 1,
         "floor": raw.get("floor"),
         "equipment_layout_id": raw.get("equipment_layout_id"),
         "section_layout_id": raw.get("section_used") or raw.get("section_layout_id"),
@@ -256,29 +261,36 @@ def _segments(doc: dict) -> None:
     segs = [s for s in doc.get("segments", []) if s.get("source") not in ("derived",)]
     n = len(segs)
     for sub in doc.get("substations", []):
-        def add(cls, poly=None, line=None, label=None):
+        def px(item):
+            b = item.get("bbox_px")
+            return [[b[0], b[1]], [b[2], b[1]], [b[2], b[3]], [b[0], b[3]]] if b else None
+
+        def add(cls, poly=None, line=None, label=None, poly_px=None):
             nonlocal n
-            if poly or line:
+            if poly or line or poly_px:
                 n += 1
                 segs.append({"id": f"G{n}", "cls": cls, "substation_id": sub["id"], "layout_id": sub.get("equipment_layout_id"),
-                             "polygon_mm": poly, "polyline_mm": line, "label": label, "source": "derived"})
-        add("room", sub["civil"].get("polygon_mm"), label=sub.get("name"))
+                             "page": sub.get("page") or 1, "polygon_mm": poly, "polyline_mm": line, "polygon_px": poly_px,
+                             "label": label, "source": "derived"})
+        civ = sub["civil"]
+        add("room", civ.get("polygon_mm"), label=sub.get("name"), poly_px=civ.get("polygon_px") or px(civ))
         for e in sub["electrical"]["equipment"]:
-            add("equipment", e.get("polygon_mm"), label=e.get("label"))
+            add("equipment", e.get("polygon_mm"), label=e.get("label"), poly_px=px(e))
         for o in sub["access"]["openings"]:
             cls = {"rolling_shutter": "rolling_shutter", "fire_exit": "fire_exit", "staircase": "staircase"}.get(o["type"], "door")
-            add(cls, o.get("polygon_mm"), label=o.get("label"))
+            add(cls, o.get("polygon_mm"), label=o.get("label"), poly_px=px(o))
         for o in sub["ventilation"]["openings"]:
-            add("ventilation", o.get("polygon_mm"), label=o.get("label"))
+            add("ventilation", o.get("polygon_mm"), label=o.get("label"), poly_px=px(o))
         for c in sub["cable"]["cutouts"]:
-            add("cutout", c.get("polygon_mm"), label=c.get("label"))
+            add("cutout", c.get("polygon_mm"), label=c.get("label"), poly_px=px(c))
         for r in sub["cable"]["routes"]:
-            add("cable_tray" if r.get("type") == "cable_tray" else "trench", r.get("polygon_mm"), r.get("polyline_mm"), r.get("label"))
-        for st in sub["civil"].get("structures", []):
-            add(st["type"], st.get("polygon_mm"), label=st.get("label"))
+            add("cable_tray" if r.get("type") == "cable_tray" else "trench", r.get("polygon_mm"), r.get("polyline_mm"), r.get("label"), px(r))
+        for st in civ.get("structures", []):
+            add(st["type"], st.get("polygon_mm"), label=st.get("label"), poly_px=px(st))
     for f in (doc.get("site") or {}).get("features", []):
         n += 1
-        segs.append({"id": f"G{n}", "cls": f.get("cls"), "layout_id": f.get("layout_id"), "polygon_px": f.get("polygon_px"),
+        segs.append({"id": f"G{n}", "cls": f.get("cls"), "layout_id": f.get("layout_id"), "page": f.get("page") or 1,
+                     "polygon_px": f.get("polygon_px"), "polyline_px": f.get("polyline_px"),
                      "polygon_mm": f.get("polygon_mm"), "polyline_mm": f.get("polyline_mm"), "label": f.get("label"), "source": "derived"})
     doc["segments"] = segs
 

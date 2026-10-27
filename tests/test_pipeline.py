@@ -51,7 +51,7 @@ def test_scale_calibration_needs_two_fits():
 
 
 def test_llm_pipeline_end_to_end(tmp_path):
-    s = load_settings(overrides={"paths.var_dir": str(tmp_path / "var")})
+    s = load_settings(overrides={"paths.var_dir": str(tmp_path / "var"), "graph.backend": "sqlite"})
     pdf = tmp_path / "t.pdf"
     _pdf(pdf)
     ex = Extractor(s, FakeLLM())

@@ -34,7 +34,7 @@ def _layouts(v1: dict) -> list[dict]:
             out.append({"id": L["id"], "page": p.get("page", 1), "type": L.get("type") or "unknown", "title": L.get("title"),
                         "bbox_px": L.get("bbox"), "dpi": p.get("dpi"), "mm_per_px": num(L.get("mm_per_px")),
                         "scale_text": L.get("scale_text"), "scale_source": "v1" if L.get("mm_per_px") else "none",
-                        "crop_image": L.get("crop_image")})
+                        "crop_image": L.get("crop_image"), "crop_base": "v1" if L.get("crop_image") else None})
     return out
 
 
@@ -50,7 +50,8 @@ def _site(v1: dict, layouts: list[dict]) -> dict:
                 if not pts:
                     continue
                 n += 1
-                f = {"id": f"F{n}", "cls": cls, "label": item.get("label"), "layout_id": None, "polygon_px": None}
+                f = {"id": f"F{n}", "cls": cls, "label": item.get("label"), "layout_id": None, "polygon_px": None,
+                     "page": item.get("page") or 1}
                 lay = next((L for L in site_layouts if _inside(pts, L["bbox_px"])), None)
                 f["layout_id"] = lay["id"] if lay else None
                 lab = (item.get("label") or "").lower()
@@ -122,7 +123,10 @@ def convert(v1_path: str | Path, pdf_dir: str | Path | None = None, rules: dict 
         "schema_version": "2.1",
         "doc_id": doc_id_for(sha),
         "source": {"file_name": src_name, "sha256": sha, "kind": "pdf", "pages": len(v1.get("pages", [])) or 1,
-                   "path": str(pdf) if pdf is not None and pdf.exists() else None},
+                   "path": str(pdf) if pdf is not None and pdf.exists() else None,
+                   # page images live in the v1 folder; resolved at runtime against paths.v1_parsed_dir
+                   "page_images": [{"page": p.get("page", 1), "base": "v1", "dir": v1_path.parent.name, "file": p.get("image"),
+                                    "size_px": p.get("size_px")} for p in v1.get("pages", []) if p.get("image")]},
         "provenance": {"method": "v1_import", "created_at": now_iso(), "imported_from": str(v1_path),
                        "notes": [v1.get("pipeline", {}).get("stage_a", ""), v1.get("pipeline", {}).get("stage_b", "")]},
         "metadata": md,

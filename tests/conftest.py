@@ -76,7 +76,8 @@ def services(corpus, tmp_path_factory):
     from substation_retrieval.services import Services
     var = tmp_path_factory.mktemp("var")
     s = load_settings(overrides={"paths.var_dir": str(var), "paths.v1_parsed_dir": str(corpus),
-                                 "paths.data_dir": str(var / "nopdf"), "llm.provider": "none"})
+                                 "paths.data_dir": str(var / "nopdf"), "llm.provider": "none",
+                                 "graph.backend": "sqlite", "engines.rag.image_embedder": "none"})
     sv = Services(s)
     sv.ingest.import_v1(log_fn=lambda m: None)
     yield sv

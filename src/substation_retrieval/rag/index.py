@@ -83,10 +83,13 @@ class IndexDB:
             CREATE TABLE IF NOT EXISTS versions(version INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT, note TEXT, doc_ids TEXT);
             CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT);
         """)
+        cols = {r[1] for r in self.db.execute("PRAGMA table_info(substations)").fetchall()}
+        if "img_embedding" not in cols:
+            self.db.execute("ALTER TABLE substations ADD COLUMN img_embedding BLOB")
         self.db.commit()
 
     # ------------------------------------------------------------ writes
-    def upsert(self, doc: dict, json_path: str, embedder=None) -> int:
+    def upsert(self, doc: dict, json_path: str, embedder=None, image_embedder=None) -> int:
         """Index one document (replaces its substations). Returns the number of substations."""
         did = doc["doc_id"]
         rows = []
@@ -100,8 +103,14 @@ class IndexDB:
                     emb = np.asarray(embedder([text])[0], np.float32).tobytes()
                 except Exception:
                     emb = None
+            iemb = None
+            if image_embedder is not None and ras is not None:
+                try:
+                    iemb = np.asarray(image_embedder.embed(ras), np.float32).tobytes()
+                except Exception:
+                    iemb = None
             rows.append((f"{did}:{sub['id']}", did, sub.get("name"), json.dumps(substation_features(sub, doc)),
-                         R.pack(ras) if ras is not None else None, scale, text, emb))
+                         R.pack(ras) if ras is not None else None, scale, text, emb, iemb))
         q = doc.get("quality") or {}
         with self._lock, self.db:
             self.db.execute("DELETE FROM substations WHERE doc_id=?", (did,))
@@ -112,7 +121,8 @@ class IndexDB:
                             (did, doc["source"]["file_name"], doc["source"]["sha256"], q.get("status"), q.get("score"),
                              (doc.get("provenance") or {}).get("method"), self._rel(json_path), doc["source"].get("path"),
                              prev[0] if prev else now_iso(), now_iso(), None, len(rows)))
-            self.db.executemany("INSERT INTO substations VALUES(?,?,?,?,?,?,?,?)", rows)
+            self.db.executemany("INSERT INTO substations(sid,doc_id,name,features,raster,raster_scale,text,embedding,img_embedding) "
+                                "VALUES(?,?,?,?,?,?,?,?,?)", rows)
         _load_doc_cached.cache_clear()
         return len(rows)
 
@@ -181,10 +191,11 @@ class IndexDB:
 
     def substations(self) -> list[dict]:
         with self._lock:
-            rows = self.db.execute("""SELECT s.sid, s.doc_id, s.name, s.features, s.raster, s.raster_scale, s.text, s.embedding
-                                      FROM substations s JOIN documents d ON d.doc_id = s.doc_id WHERE d.deleted=0""").fetchall()
+            rows = self.db.execute("""SELECT s.sid, s.doc_id, s.name, s.features, s.raster, s.raster_scale, s.text, s.embedding,
+                                      s.img_embedding FROM substations s JOIN documents d ON d.doc_id = s.doc_id WHERE d.deleted=0""").fetchall()
         return [{"sid": r[0], "doc_id": r[1], "name": r[2], "features": json.loads(r[3]), "raster": r[4], "raster_scale": r[5],
-                 "text": r[6], "embedding": np.frombuffer(r[7], np.float32) if r[7] else None} for r in rows]
+                 "text": r[6], "embedding": np.frombuffer(r[7], np.float32) if r[7] else None,
+                 "img_embedding": np.frombuffer(r[8], np.float32) if r[8] else None} for r in rows]
 
     def load_doc(self, doc_id: str) -> dict | None:
         d = self.document(doc_id)

@@ -29,9 +29,15 @@ class Services:
         if self.settings.get("engines.rag.embedding", "none") == "openai" and self.llm.available:
             embedder = self.llm.embed
         self.kg = KGEngine(self.store, self.index, self.settings)
-        self.rag = RAGEngine(self.index, self.settings, embedder)
+        from .geometry.raster import load_image_embedder
+        self.image_embedder = load_image_embedder(self.settings, log.warning)
+        self.ingest.image_embedder = self.image_embedder
+        self.rag = RAGEngine(self.index, self.settings, embedder, self.image_embedder)
         self.orchestrator = Orchestrator(self.kg, self.rag, self.settings)
-        self.ingest.ensure_ontology()
+        try:
+            self.ingest.ensure_ontology()
+        except Exception as e:  # graph down: app still starts (RAG + ontology view)
+            log.warning("ontology not loaded into the graph: %s", e)
         self._watcher: threading.Thread | None = None
 
     def stop_workers(self):

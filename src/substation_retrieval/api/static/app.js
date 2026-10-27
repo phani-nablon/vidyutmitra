@@ -4,7 +4,8 @@
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const FAMILY_COLOR = { site: "#0ea5b7", equipment: "#2563eb", civil: "#7c3aed", access: "#ea8a0c", cable: "#e11d48" };
+const FAMILY_COLOR = { site: "#0ea5b7", electrical: "#2563eb", civil: "#7c3aed", access: "#ea8a0c", cable: "#e11d48" };
+const FAMILY_NAME = { site: "Site / plot", electrical: "Electrical", civil: "Civil / structure", access: "Access & ventilation", cable: "Cable routes" };
 const LABEL_COLOR = { document: "#111827", substation: "#7c3aed", layout: "#9ca3af", equipment: "#2563eb", opening: "#ea8a0c",
   structure: "#6d28d9", route: "#e11d48", site_feature: "#0ea5b7", facet: "#64748b", concept: "#a3a3a3", catalogue_item: "#15803d" };
 const GROUP_COLOR = { equipment: "#2563eb", door: "#ea8a0c", louvre: "#ca8a04", cutout: "#e11d48", column: "#6d28d9", beam: "#7c3aed",
@@ -90,14 +91,35 @@ function resultCard(r, i) {
     <div class="row small"><span class="pill ${r.verdict}">${r.verdict}</span><b>${(+r.score).toFixed(3)}</b>
       <span class="muted">${esc(r.substation_name)} · ${r.engine.toUpperCase()} · coverage ${(100 * r.coverage).toFixed(0)}%${r.status ? " · " + esc(r.status) : ""}</span></div>
     <div class="bar"><i style="width:${Math.min(100, 100 * r.score)}%"></i></div>
-    ${r.overlay ? overlaySVG(r.overlay) : ""}
+    ${r.overlay ? `<div class="viewtabs" data-doc="${esc(r.doc_id)}">
+        <button class="vt active" data-v="overlay">Overlay on new site</button>
+        ${r.overlay.equipment_layout_id ? `<button class="vt" data-v="layout" data-l="${esc(r.overlay.equipment_layout_id)}">Equipment layout</button>` : ""}
+        ${r.overlay.section_layout_id ? `<button class="vt" data-v="layout" data-l="${esc(r.overlay.section_layout_id)}">Section</button>` : ""}
+        ${r.overlay.site_layout_id ? `<button class="vt" data-v="layout" data-l="${esc(r.overlay.site_layout_id)}">Site plan</button>` : ""}
+        <button class="vt" data-v="masks" data-p="${r.overlay.page || 1}">Masks</button></div>
+      <div class="viewbody">${overlaySVG(r.overlay)}</div>` : ""}
     <div class="comps">${comps}</div>
     <ul class="checks">${checks}</ul>${expl}
     <div class="actions"><button class="btn" data-graph="${esc(r.doc_id)}">Site graph</button>
       <button class="btn" data-json="${esc(r.doc_id)}">Extraction JSON</button></div></div>`;
 }
 
+function bindViewTabs(root) {
+  $$(".viewtabs", root).forEach((vt) => {
+    const body = vt.nextElementSibling, doc = vt.dataset.doc, svg = body.innerHTML;
+    $$(".vt", vt).forEach((b) => b.addEventListener("click", () => {
+      $$(".vt", vt).forEach((x) => x.classList.toggle("active", x === b));
+      if (b.dataset.v === "overlay") body.innerHTML = svg;
+      else {
+        const src = b.dataset.v === "masks" ? `/api/documents/${doc}/masks/${b.dataset.p}.jpg` : `/api/documents/${doc}/layout/${encodeURIComponent(b.dataset.l)}.jpg`;
+        body.innerHTML = `<a href="${src}" target="_blank"><img class="drawing" src="${src}" alt="drawing" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'muted small',textContent:'no image for this view'}))"></a>`;
+      }
+    }));
+  });
+}
+
 function bindResultActions(root) {
+  bindViewTabs(root);
   $$("[data-graph]", root).forEach((b) => b.addEventListener("click", () => { showTab("site"); selectSite(b.dataset.graph); }));
   $$("[data-json]", root).forEach((b) => b.addEventListener("click", () => window.open("/api/documents/" + b.dataset.json, "_blank")));
 }
@@ -225,122 +247,211 @@ $("#rebuild").addEventListener("click", async () => {
   $("#rebuild").disabled = false; refreshLibrary(); refreshStatus();
 });
 
-/* ---------------------------------------------------------------- force layout */
+/* ---------------------------------------------------------------- tree view (original design-graph layout) */
+function treeView(container, root, opts = {}) {
+  const ROW = 30, PADX = 16, CH = 6.9, MAXW = 330, GAP = 44;
+  const collapsed = new Set();
+  (function init(n) { if (n.collapsed) collapsed.add(n.id); (n.children || []).forEach(init); })(root);
+  let selected = null;
+  function render() {
+    const rows = [], widths = [];
+    (function place(n, d) {
+      n._d = d;
+      const extra = (n.children?.length ? 3 : 0) + (collapsed.has(n.id) && n.children?.length ? String(n.children.length).length + 4 : 0);
+      n._w = Math.min(MAXW, Math.max(80, (n.label.length + extra + 1) * CH + 2 * PADX));
+      widths[d] = Math.max(widths[d] || 0, n._w);
+      const kids = collapsed.has(n.id) ? [] : (n.children || []);
+      if (!kids.length) { n._y = rows.length * ROW + ROW; rows.push(n); }
+      else { kids.forEach((c) => place(c, d + 1)); n._y = (kids[0]._y + kids[kids.length - 1]._y) / 2; }
+      n._kids = kids;
+    })(root, 0);
+    const xs = [16]; widths.forEach((w, i) => (xs[i + 1] = xs[i] + w + GAP));
+    const W = xs[widths.length] + 16, H = rows.length * ROW + ROW;
+    let links = "", boxes = "";
+    (function draw(n) {
+      const x = xs[n._d], y = n._y, c = (n.family && FAMILY_COLOR[n.family]) || "#64748b";
+      n._kids.forEach((k) => {
+        const x1 = x + n._w, x2 = xs[k._d], mx = (x1 + x2) / 2;
+        links += `<path d="M${x1} ${y}C${mx} ${y} ${mx} ${k._y} ${x2} ${k._y}" fill="none" stroke="${c}" stroke-opacity=".45" stroke-width="1.2"/>`;
+        draw(k);
+      });
+      const hasKids = (n.children || []).length > 0, folded = collapsed.has(n.id);
+      const maxc = Math.floor((n._w - 2 * PADX) / CH) - (hasKids ? 3 : 0) - (folded ? String(n.children.length).length + 4 : 0);
+      const label = n.label.length > maxc ? n.label.slice(0, maxc - 1) + "…" : n.label;
+      boxes += `<g class="node" data-id="${esc(n.id)}"><rect x="${x}" y="${y - 11}" width="${n._w}" height="22" rx="6"
+        fill="${c}" fill-opacity="${n.id === selected ? 0.28 : n._d === 0 ? 0.2 : 0.09}" stroke="${c}" stroke-width="${n.id === selected ? 2 : 1}"/>
+        <text x="${x + PADX - 6}" y="${y + 4}" fill="currentColor">${hasKids ? (folded ? "▸ " : "▾ ") : ""}${esc(label)}${folded ? ` (+${n.children.length})` : ""}</text>
+        <title>${esc(n.label)}</title></g>`;
+    })(root);
+    container.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="color:var(--ink)">${links}${boxes}</svg>`;
+    const byId = new Map(); (function idx(n) { byId.set(n.id, n); (n.children || []).forEach(idx); })(root);
+    $$("g.node", container).forEach((g) => g.addEventListener("click", () => {
+      const n = byId.get(g.dataset.id);
+      selected = n.id;
+      if ((n.children || []).length) { collapsed.has(n.id) ? collapsed.delete(n.id) : collapsed.add(n.id); }
+      render();
+      opts.onSelect && opts.onSelect(n);
+    }));
+  }
+  render();
+  return {
+    expandAll() { collapsed.clear(); render(); },
+    collapseTo(depth) { collapsed.clear(); (function c(n, d) { if (d >= depth && (n.children || []).length) collapsed.add(n.id); (n.children || []).forEach((k) => c(k, d + 1)); })(root, 0); render(); },
+  };
+}
+
+function propsTable(obj) {
+  return `<table>${Object.entries(obj || {}).filter(([k, v]) => v !== null && v !== "" && typeof v !== "object")
+    .map(([k, v]) => `<tr><td class="muted">${esc(k)}</td><td>${esc(v)}</td></tr>`).join("")}</table>` +
+    Object.entries(obj || {}).filter(([k, v]) => v && typeof v === "object").map(([k, v]) => `<div class="muted">${esc(k)}</div><pre>${esc(JSON.stringify(v))}</pre>`).join("");
+}
+
+/* ---------------------------------------------------------------- network view (optional) */
 function forceLayout(nodes, edges, W, H, iters = 320) {
   const idx = new Map(nodes.map((n, i) => [n.id, i]));
   nodes.forEach((n, i) => { n.x = W / 2 + Math.cos(i) * W * 0.3 * Math.random(); n.y = H / 2 + Math.sin(i) * H * 0.3 * Math.random(); n.vx = 0; n.vy = 0; });
   const E = edges.map((e) => [idx.get(e.out), idx.get(e.in)]).filter(([a, b]) => a !== undefined && b !== undefined);
-  const k = Math.sqrt((W * H) / Math.max(nodes.length, 1)) * 0.55;
+  const k = Math.sqrt((W * H) / Math.max(nodes.length, 1)) * 0.7;
   for (let t = 0; t < iters; t++) {
     const temp = 1 - t / iters;
-    for (let i = 0; i < nodes.length; i++) {
-      for (let j = i + 1; j < nodes.length; j++) {
-        const a = nodes[i], b = nodes[j];
-        let dx = a.x - b.x, dy = a.y - b.y, d2 = dx * dx + dy * dy + 0.01;
-        const f = (k * k) / d2;
-        a.vx += dx * f * 0.05; a.vy += dy * f * 0.05; b.vx -= dx * f * 0.05; b.vy -= dy * f * 0.05;
-      }
-    }
-    E.forEach(([i, j]) => {
-      const a = nodes[i], b = nodes[j];
-      const dx = b.x - a.x, dy = b.y - a.y, d = Math.sqrt(dx * dx + dy * dy) + 0.01;
-      const f = (d - k) / d * 0.08;
+    for (let i = 0; i < nodes.length; i++) for (let j = i + 1; j < nodes.length; j++) {
+      const a = nodes[i], b = nodes[j]; const dx = a.x - b.x, dy = a.y - b.y, d2 = dx * dx + dy * dy + 0.01, f = (k * k) / d2 * 0.05;
       a.vx += dx * f; a.vy += dy * f; b.vx -= dx * f; b.vy -= dy * f;
-    });
-    nodes.forEach((n) => {
-      n.vx += (W / 2 - n.x) * 0.002; n.vy += (H / 2 - n.y) * 0.002;
-      const v = Math.sqrt(n.vx * n.vx + n.vy * n.vy), cap = 12 * temp + 0.5;
-      if (v > cap) { n.vx *= cap / v; n.vy *= cap / v; }
-      n.x = Math.max(20, Math.min(W - 20, n.x + n.vx)); n.y = Math.max(20, Math.min(H - 20, n.y + n.vy));
-      n.vx *= 0.6; n.vy *= 0.6;
-    });
+    }
+    E.forEach(([i, j]) => { const a = nodes[i], b = nodes[j], dx = b.x - a.x, dy = b.y - a.y, d = Math.sqrt(dx * dx + dy * dy) + 0.01, f = (d - k) / d * 0.08;
+      a.vx += dx * f; a.vy += dy * f; b.vx -= dx * f; b.vy -= dy * f; });
+    nodes.forEach((n) => { n.vx += (W / 2 - n.x) * 0.002; n.vy += (H / 2 - n.y) * 0.002;
+      const v = Math.hypot(n.vx, n.vy), cap = 12 * temp + 0.5; if (v > cap) { n.vx *= cap / v; n.vy *= cap / v; }
+      n.x = Math.max(30, Math.min(W - 30, n.x + n.vx)); n.y = Math.max(20, Math.min(H - 20, n.y + n.vy)); n.vx *= 0.6; n.vy *= 0.6; });
   }
 }
 
-function drawGraph(svg, nodes, edges, colorOf, onClick) {
-  const W = svg.clientWidth || 700, H = svg.clientHeight || 520;
-  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+function networkView(container, nodes, edges, onSelect) {
+  const W = Math.max(900, container.clientWidth - 4), H = 680;
   forceLayout(nodes, edges, W, H);
   const pos = new Map(nodes.map((n) => [n.id, n]));
+  const named = new Set(["document", "substation", "equipment"]);
   let s = "";
-  edges.forEach((e) => {
-    const a = pos.get(e.out), b = pos.get(e.in);
-    if (!a || !b) return;
-    s += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#94a3b8" stroke-opacity=".55"><title>${esc(e.label)}</title></line>`;
-    if (edges.length < 160) s += `<text x="${(a.x + b.x) / 2}" y="${(a.y + b.y) / 2}" fill="#94a3b8" style="font-size:8px">${esc(e.label)}</text>`;
-  });
+  edges.forEach((e) => { const a = pos.get(e.out), b = pos.get(e.in); if (a && b)
+    s += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#94a3b8" stroke-opacity=".45"><title>${esc(e.label)}</title></line>`; });
   nodes.forEach((n, i) => {
-    const r = n.label === "substation" || n.label === "document" ? 9 : n.label === "concept" ? 5 : 6;
-    s += `<g data-i="${i}" style="cursor:pointer"><circle cx="${n.x}" cy="${n.y}" r="${r}" fill="${colorOf(n)}" stroke="#fff" stroke-width="1.2"><title>${esc(n.label)}: ${esc(n.name)}</title></circle>
-      <text x="${n.x + r + 2}" y="${n.y + 3}">${esc(String(n.name).slice(0, 22))}</text></g>`;
+    const r = n.label === "substation" || n.label === "document" ? 9 : 6;
+    const c = (n.family && FAMILY_COLOR[n.family]) || LABEL_COLOR[n.label] || "#64748b";
+    s += `<g class="node" data-i="${i}"><circle cx="${n.x}" cy="${n.y}" r="${r}" fill="${c}" stroke="#fff"><title>${esc(n.label)}: ${esc(n.name)}</title></circle>
+      ${named.has(n.label) ? `<text x="${n.x + r + 3}" y="${n.y + 4}" fill="currentColor" style="font-size:11px">${esc(String(n.name).slice(0, 18))}</text>` : ""}</g>`;
   });
-  svg.innerHTML = s;
-  $$("g[data-i]", svg).forEach((g) => g.addEventListener("click", () => onClick && onClick(nodes[+g.dataset.i])));
+  container.innerHTML = `<svg width="${W}" height="${H}" style="color:var(--ink)">${s}</svg>`;
+  $$("g.node", container).forEach((g) => g.addEventListener("click", () => onSelect(nodes[+g.dataset.i])));
 }
 
 /* ---------------------------------------------------------------- ontology */
+let ONTO = null;
 async function loadOntology() {
   const o = await api("/api/ontology");
-  const tree = (n, fam) => {
-    const color = n.color || fam || "#94a3b8";
-    return `<li><span class="node"><span class="dot" style="background:${color}"></span><b>${esc(n.label)}</b>
-      <span class="cnt">${n.count ?? 0}</span>${n.vertex ? `<span class="fields">${esc(n.vertex)}${n.fields.length ? " · " + esc(n.fields.join(", ")) : ""}</span>` : ""}</span>
-      ${n.children.length ? "<ul>" + n.children.map((c) => tree(c, color)).join("") + "</ul>" : ""}</li>`;
-  };
-  $("#onto-tree").innerHTML = `<div class="tree"><ul>${tree(o.tree)}</ul></div>`;
-  const nodes = [], edges = [];
-  const walk = (n, parent, fam) => {
-    const color = n.color || fam || "#64748b";
-    nodes.push({ id: n.id, name: `${n.label}${n.count ? " (" + n.count + ")" : ""}`, label: "concept", color });
-    if (parent) edges.push({ out: n.id, in: parent, label: "SUBCLASS_OF" });
-    n.children.forEach((c) => walk(c, n.id, color));
-  };
-  walk(o.tree, null, null);
-  drawGraph($("#onto-svg"), nodes, edges, (n) => n.color);
-  $("#onto-meta").textContent = `vertex labels: ${o.vertex_labels.join(", ")} · edge labels: ${o.edge_labels.join(", ")}`;
+  ONTO = treeView($("#onto-tree"), o.view, { onSelect: (n) => {
+    $("#onto-info").innerHTML = `<h3>${esc(n.label)}</h3>${propsTable(n.detail)}`;
+  } });
+  ONTO.collapseTo(2);
+  $("#onto-meta").innerHTML = `<div class="legend">${Object.entries(FAMILY_NAME).map(([k, v]) => `<span style="--c:${FAMILY_COLOR[k]}">${v}</span>`).join("")}</div>` +
+    `vertex labels: ${o.vertex_labels.join(", ")} · edge labels: ${o.edge_labels.join(", ")}`;
 }
+$("#onto-expand").addEventListener("click", () => ONTO && ONTO.expandAll());
+$("#onto-collapse").addEventListener("click", () => ONTO && ONTO.collapseTo(1));
 
-/* ---------------------------------------------------------------- site graph */
+/* ---------------------------------------------------------------- site */
 async function loadSiteList() {
   const docs = DOCS.length ? DOCS : await api("/api/documents");
   DOCS = docs;
-  const sel = $("#site-doc");
-  const cur = sel.value;
+  const sel = $("#site-doc"), cur = sel.value;
   sel.innerHTML = docs.map((d) => `<option value="${d.doc_id}">${esc(d.file_name)}</option>`).join("");
   if (cur) sel.value = cur;
   if (sel.value && !loaded.site) { loaded.site = true; selectSite(sel.value); }
 }
 $("#site-doc").addEventListener("change", (e) => selectSite(e.target.value));
+$("#site-view").addEventListener("change", () => selectSite($("#site-doc").value));
 $("#hide-concepts").addEventListener("change", () => selectSite($("#site-doc").value));
 $("#hide-layouts").addEventListener("change", () => selectSite($("#site-doc").value));
 
+const fmtm = (v) => (v ? (v / 1000).toFixed(2) + " m" : "–");
+function summaryHTML(s) {
+  const md = s.metadata, q = s.quality || {};
+  const kv = (k, v) => (v === null || v === undefined || v === "" ? "" : `<tr><td class="muted">${esc(k)}</td><td>${esc(v)}</td></tr>`);
+  let h = `<table>${kv("drawing", s.file_name)}${kv("extraction", s.method)}${kv("quality", `${q.score} (${q.status})`)}
+    ${kv("installation", md.installation)}${kv("arrangement", md.arrangement)}${kv("context", md.context)}${kv("floor", md.floor)}
+    ${kv("location", md.location_in_building)}${kv("voltage", md.voltage_kv ? md.voltage_kv + " kV" : "")}${kv("substations", md.substation_count)}${kv("kind", md.kind)}</table>`;
+  s.substations.forEach((u) => {
+    h += `<h4>${esc(u.name)}${u.floor ? " · " + esc(u.floor) : ""}</h4><table>
+      ${kv("equipment", Object.entries(u.counts || {}).map(([k, v]) => `${v} ${k}`).join(", "))}
+      ${kv("transformer kVA", u.kva.join(" / ") + (u.kva_from_catalogue ? ` (${u.kva_from_catalogue} from catalogue)` : ""))}
+      ${kv("room", `${fmtm(u.length_mm)} × ${fmtm(u.width_mm)} · ${u.area_m2 ?? "–"} m² · ${u.shape || ""}`)}
+      ${kv("clear height", u.clear_height_mm ? u.clear_height_mm + " mm" : "")}${kv("slab to soffit", u.slab_to_soffit_mm)}
+      ${kv("beam bottom", u.beam_bottom_mm)}${kv("plinth / platform", u.plinth_mm)}${kv("trench depth", u.trench_depth_mm)}
+      ${kv("doors", u.doors.join(", "))}${kv("louvres / cutouts / beams / routes", `${u.n_louvres} / ${u.n_cutouts} / ${u.n_beams} / ${u.n_routes}`)}
+      ${kv("scale", u.mm_per_px ? u.mm_per_px.toFixed(2) + " mm/px" : "")}${kv("section used", u.section_reason)}</table>`;
+  });
+  const f = s.site;
+  h += `<h4>Site plan</h4><table>${kv("features", Object.entries(f.features).map(([k, v]) => `${v} ${k}`).join(", ") || "none extracted")}
+    ${kv("scaled", f.scaled ? "yes" : "no (distances not measurable)")}</table>`;
+  if (f.clearance_checks.length) h += `<div>${f.clearance_checks.map((c) => `<span class="tag ${c.meets_norm ? "" : "fail"}">${esc(c.feature)} ${(c.distance_mm / 1000).toFixed(1)} m / norm ${(c.norm_mm / 1000).toFixed(1)} m</span>`).join(" ")}</div>`;
+  return h;
+}
+
 async function selectSite(docId) {
   if (!docId) return;
-  if ($("#site-doc").value !== docId) {
-    if (!DOCS.length) await loadSiteList();
-    $("#site-doc").value = docId;
+  if ($("#site-doc").value !== docId) { if (!DOCS.length) await loadSiteList(); $("#site-doc").value = docId; }
+  const view = $("#site-view").value;
+  $("#net-opts").classList.toggle("hidden", view !== "network");
+  const [sum, geo, g] = await Promise.all([api(`/api/documents/${docId}/summary`), api(`/api/documents/${docId}/geometry`), api(`/api/documents/${docId}/graph`)]);
+  const props = new Map(g.nodes.map((n) => [n.id, n]));
+  const show = (vid, fallback) => {
+    const n = props.get(vid);
+    $("#node-info").innerHTML = n ? `<h3>${esc(n.label)}</h3><div class="muted">${esc(n.id)}</div>${propsTable(n.props)}` : (fallback || "");
+  };
+  $("#site-meta").textContent = `${g.nodes.length} vertices · ${g.edges.length} edges · quality ${sum.quality.score} (${sum.quality.status})`;
+  if (view === "tree") {
+    const tree = await api(`/api/documents/${docId}/tree`);
+    treeView($("#site-graph"), tree, { onSelect: (n) => show(n.vid, `<h3>${esc(n.label)}</h3>`) });
+  } else {
+    let nodes = g.nodes, edges = g.edges;
+    if ($("#hide-concepts").checked) nodes = nodes.filter((n) => n.label !== "concept");
+    if ($("#hide-layouts").checked) nodes = nodes.filter((n) => n.label !== "layout");
+    const keep = new Set(nodes.map((n) => n.id));
+    edges = edges.filter((e) => keep.has(e.out) && keep.has(e.in));
+    networkView($("#site-graph"), nodes, edges, (n) => show(n.id));
   }
-  const [g, geo] = await Promise.all([api(`/api/documents/${docId}/graph`), api(`/api/documents/${docId}/geometry`)]);
-  let nodes = g.nodes, edges = g.edges;
-  if ($("#hide-concepts").checked) nodes = nodes.filter((n) => n.label !== "concept");
-  if ($("#hide-layouts").checked) nodes = nodes.filter((n) => n.label !== "layout");
-  const keep = new Set(nodes.map((n) => n.id));
-  edges = edges.filter((e) => keep.has(e.out) && keep.has(e.in));
-  $("#site-meta").textContent = `${nodes.length} vertices · ${edges.length} edges · quality ${geo.quality.score} (${geo.quality.status})`;
-  drawGraph($("#site-svg"), nodes, edges, (n) => (n.family && FAMILY_COLOR[n.family]) || LABEL_COLOR[n.label] || "#64748b",
-    (n) => { $("#node-info").innerHTML = `<b>${esc(n.label)}</b> ${esc(n.id)}<pre>${esc(JSON.stringify(n.props, null, 1))}</pre>`; });
-  $("#site-geom").innerHTML = geo.substations.map((s) => `<div class="card"><b>${esc(s.name)}</b> <span class="muted small">floor ${esc(s.floor || "-")} · section ${esc(s.section || "-")}</span>
+  $("#node-info").innerHTML = summaryHTML(sum);
+  // geometry
+  $("#site-geom").innerHTML = geo.substations.map((s) => `<div class="card"><b>${esc(s.name)}</b>
      ${s.room ? overlaySVG({ room: s.room, items: s.items }) : '<div class="muted">no room geometry</div>'}
-     <div class="small">${Object.entries(s.civil).filter(([k, v]) => v != null).map(([k, v]) => `<span class="tag">${esc(k)} ${esc(v)}</span>`).join(" ")}</div>
-     <table><tr><th>label</th><th>type</th><th class="num">kVA</th><th>source</th><th class="num">L×B×H mm</th></tr>${s.equipment.map((e) =>
+     <table><tr><th>label</th><th>type</th><th class="num">kVA</th><th>kVA source</th><th class="num">L×B×H mm</th></tr>${s.equipment.map((e) =>
        `<tr><td>${esc(e.label)}</td><td>${esc(e.equipment_type)}</td><td class="num">${e.kva ?? ""}</td><td class="small">${esc(e.kva_source || "")}</td>
-        <td class="num">${[e.L_mm, e.B_mm, e.H_mm].map((v) => (v ? Math.round(v) : "–")).join("×")}</td></tr>`).join("")}</table>
-     ${s.section_reason ? `<div class="small muted">section: ${esc(s.section_reason)}</div>` : ""}</div>`).join("") +
-    `<div class="small">${(geo.site?.clearance_checks || []).map((c) => `<span class="tag ${c.meets_norm ? "" : "fail"}">${esc(c.feature)} ${(c.distance_mm / 1000).toFixed(1)} m / ${(c.norm_mm / 1000).toFixed(1)} m</span>`).join(" ")}</div>`;
-  const imgs = (geo.artifacts || []).filter((a) => /\.(jpe?g|png)$/i.test(a));
-  $("#site-art").innerHTML = imgs.length ? imgs.map((a) => `<a href="/api/artifacts/${docId}/${a}" target="_blank"><img loading="lazy" src="/api/artifacts/${docId}/${a}">${esc(a)}</a>`).join("")
-    : '<span class="muted small">no debug artifacts (imported from v1, or debug saving off)</span>';
+        <td class="num">${[e.L_mm, e.B_mm, e.H_mm].map((v) => (v ? Math.round(v) : "–")).join("×")}</td></tr>`).join("")}</table></div>`).join("");
+  // drawing + masks
+  const cls = Object.keys(sum.mask_classes);
+  const pages = sum.pages;
+  const art = (geo.artifacts || []).filter((a) => /\.(jpe?g|png)$/i.test(a) && !/^page\d/.test(a));
+  $("#site-art").innerHTML = `<div class="row small">page <select id="mask-page">${pages.map((p) => `<option>${p}</option>`).join("")}</select>
+      <label><input type="checkbox" id="mask-on" checked> masks</label>
+      ${cls.map((c) => `<label class="mk" style="--c:${maskColor(c)}"><input type="checkbox" class="mask-cls" value="${c}" checked> ${esc(c)} (${sum.mask_classes[c]})</label>`).join("")}</div>
+    <a id="mask-link" target="_blank"><img id="mask-img" class="drawing" alt="drawing with masks"></a>
+    <div class="row small">${sum.layouts.filter((L) => !["title_block", "legend", "notes", "legend_and_title_block", "table"].includes(L.type))
+      .map((L) => `<button class="btn lay" data-l="${esc(L.id)}">${esc(L.type)}${L.title ? ": " + esc(L.title.slice(0, 26)) : ""}</button>`).join("")}</div>
+    <div class="gallery">${art.map((a) => `<a href="/api/artifacts/${docId}/${a}" target="_blank"><img loading="lazy" src="/api/artifacts/${docId}/${a}">${esc(a)}</a>`).join("")}</div>`;
+  const refresh = (layout) => {
+    const on = $("#mask-on").checked, chosen = $$(".mask-cls").filter((x) => x.checked).map((x) => x.value), p = $("#mask-page").value;
+    let src = on ? `/api/documents/${docId}/masks/${p}.jpg?classes=${encodeURIComponent(chosen.join(","))}` : `/api/documents/${docId}/page/${p}.jpg`;
+    if (layout) src = on ? `${src}&layout=${encodeURIComponent(layout)}` : `/api/documents/${docId}/layout/${encodeURIComponent(layout)}.jpg`;
+    $("#mask-img").src = src; $("#mask-link").href = src;
+  };
+  let curLayout = null;
+  $$("#site-art input, #site-art select").forEach((x) => x.addEventListener("change", () => refresh(curLayout)));
+  $$("#site-art .lay").forEach((b) => b.addEventListener("click", () => { curLayout = curLayout === b.dataset.l ? null : b.dataset.l; refresh(curLayout); }));
+  refresh(null);
 }
+const MASK_RGB = { room: "#28a03c", site_boundary: "#dc2828", equipment: "#2563eb", door: "#ea8a0c", rolling_shutter: "#e66e00", fire_exit: "#c83c3c",
+  ventilation: "#b7a50e", cutout: "#e11d5d", beam: "#7c3aed", column: "#6e2894", trench: "#1d9e75", cable_tray: "#78b475", access_path: "#e6c800",
+  wayleave: "#e6c800", nalla: "#1478c8", tree: "#288c28" };
+const maskColor = (c) => MASK_RGB[c] || "#888";
 
 /* ---------------------------------------------------------------- admin */
 async function loadAdmin() {

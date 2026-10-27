@@ -30,6 +30,7 @@ class IngestService:
         self.index = index
         self.jobs = jobs
         self._extractor = extractor
+        self.image_embedder = None
         self.pool: WorkerPool | None = None
 
     @property
@@ -126,7 +127,7 @@ class IngestService:
         V, E = build_partition(doc)
         self.store.upsert_shared(shared_for(V, E), [])
         self.store.upsert_partition(doc["doc_id"], V, E)
-        self.index.upsert(doc, str(json_path), self._embedder())
+        self.index.upsert(doc, str(json_path), self._embedder(), self.image_embedder)
         if similar:
             self.refresh_similar([doc["doc_id"]])
 

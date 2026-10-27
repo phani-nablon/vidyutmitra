@@ -1,140 +1,200 @@
 # substation_retrieval
 
-Design reuse for AEML consumer substations (CSS). A new site's requirement goes in, as text, structured JSON
-or a builder's site plan. The closest historic CSS designs come back, each with a reuse / adapt / new verdict,
-the checks that pass or fail, and an overlay of the historic layout placed on the new site.
+Design reuse for AEML consumer substations (CSS). Describe a new site and get the closest historic CSS designs.
+You can describe it as text, structured JSON, or a builder's site plan.
 
-- **Extraction v2** turns a drawing (PDF now, DXF/DWG first cut) into a schema-2.1 JSON:
-  - layouts, scale, section heights, equipment, openings, beams, cutouts, trenches
-  - site features and mask polygons
-  - plot-clearance self-check
-  - catalogue-inferred transformer rating
-- **Knowledge graph (primary engine).** Every drawing becomes a graph partition typed by the CSS ontology
-  (5 families, 40+ classes). Matching works in four layers:
-  - Hungarian vertex pairing (Wu-Palmer × attributes × geometry)
-  - IDF-weighted edge consistency
-  - Aligned Layout Score
-  - facet rarity
-- **RAG (fallback engine).** The shortlist comes from BM25 text + a feature vector + canonical mask rasters,
-  then is re-ranked with the same geometry and compatibility library.
-- **Orchestrator.** `retrieval_mode` is `kg | rag | auto | both`, and each engine has its own enable flag.
-  `auto` falls back to RAG when the graph is down or slow, the query graph is too small, or KG candidates are weak.
-- **Incremental ingestion.** Each pushed file (or bulk folder) becomes a job:
-  extract → review gate → graph upsert (delete by partition) → RAG upsert → new index version.
-  Retrieval reloads on the next version. No full rebuild is needed.
-- **UI** at `/` with five tabs:
-  - chat with site-plan upload and result overlays
-  - library & ingest jobs
-  - ontology tree / graph
-  - per-site knowledge graph with extracted geometry and debug masks
-  - admin engine toggles
+Each result comes with:
 
-Busbar, fault level, floor loading, interconnections and SLDs are out of scope by decision.
+- a **reuse / adapt / new** verdict
+- the checks that pass or fail
+- the historic layout overlaid on the new site
+- the original equipment layout, section and site plan from its drawing
 
-## Install (uv, no docker)
+The parts:
 
-```bash
-cd substation_retrieval
-uv venv                              # .venv (Python >= 3.10)
-uv pip install -r requirements.txt   # runtime deps
-uv pip install -e .                  # the package + `sr` command
-uv pip install -r requirements-optional.txt   # optional: gremlinpython, ezdxf, anthropic, pytest
-```
+- **Extraction v2.** Each drawing (PDF; DXF/DWG first cut) becomes a schema-2.1 JSON. GPT-6 Astra makes two
+  passes, then segmentation masks, scale calibration, section choice, catalogue rating inference and the
+  plot-clearance check are applied.
+- **Knowledge graph on JanusGraph (primary engine).** It is typed by the CSS ontology: 5 families
+  (Site, Electrical, Civil, Access, Cable). Matching combines Hungarian vertex pairing, IDF edge consistency,
+  the Aligned Layout Score and facet rarity.
+- **RAG (fallback engine).** BM25 + feature vector + mask rasters (+ DINOv2 image embeddings when installed),
+  re-ranked with the same geometry and compatibility checks.
+- **Incremental ingestion.** One job per file (or a bulk folder), with index versioning. No full rebuild is needed.
+- **UI** at http://127.0.0.1:8077 with five tabs:
+  - Chat
+  - Library & ingest
+  - Ontology (tree)
+  - Site graph (design tree / network + site summary + masks over the original drawing)
+  - Admin
 
-### Keys
+What has been implemented and verified is in the Claude Doc
+[CSS Design Retrieval: First Draft Implementation](https://claude.ai/artifact/PexMPsfXUHQWNKMZ3tcvkS).
 
-Put the keys in a `.env` file, in this folder or any parent folder
-(e.g. `C:\Users\ibpha\work\projects\.env`):
+---
 
-```
-ASTRA_API_KEY=...            # GPT-6 Astra via the OpenAI-compatible API (OPENAI_API_KEY also accepted)
-# OPENAI_BASE_URL=...        # if Astra sits behind a gateway
-```
+## 1. Prerequisites (Windows)
 
-Without a key, these still work:
-
-- the v1 import
-- KG/RAG search
-- chat (rule parser + templated answers)
-
-New PDFs fall back to text-only extraction and are marked provisional. Keys are never logged or returned by the API.
-
-## Run
-
-```bash
-sr import-v1                 # index the 50 reviewed v1 extractions (css_parsed), no LLM cost
-sr serve                     # http://127.0.0.1:8077  (API + UI + in-process ingest worker)
-sr search "indoor CSS ground floor, 2 x 1500 kVA DT, 1 RMU, 4 LTP, room 11 x 8 m, clear height 4.5 m" --mode auto
-sr ingest path/to/new.pdf --wait          # or a folder; --no-v1 forces the v2 LLM pipeline
-sr extract path/to/new.pdf --out new.json # extraction only, no indexing
-sr rebuild                   # re-index all stored extractions (no LLM)
-python -m pytest             # tests (synthetic fixtures, no client data, no network)
-```
-
-Paths come from `config/settings.yaml` and can be overridden with environment variables:
-
-- `SR_DATA_DIR`: the PDFs, default `../../data/all_data/css/pdf`
-- `SR_V1_DIR`: `css_parsed`
-- `SR_VAR_DIR`: the workspace
-
-## Workspace (`var/`, gitignored)
-
-| path | content |
+| Need | Install |
 |---|---|
-| `var/db/kg.sqlite` | knowledge graph (vertices / edges, partition per drawing) |
-| `var/db/index.sqlite` | document registry, RAG index (features, mask rasters, text), index versions |
-| `var/db/jobs.sqlite` | ingest job queue |
-| `var/extractions/<doc_id>/doc.json` | schema-2.1 extraction per drawing (source of truth for rebuilds) |
-| `var/artifacts/<doc_id>/` | page renders, layout crops, overlays, `masks/*.png`, raw LLM JSON |
-| `var/cache/llm/` | LLM responses keyed by file sha + prompt version |
-| `var/uploads/`, `var/siteplans/`, `var/inbox/` | uploaded drawings, analysed site plans, watched folder |
+| Python ≥ 3.10 + uv | `winget install astral-sh.uv` (uv brings Python if missing) |
+| Java 17 (for JanusGraph) | `winget install Microsoft.OpenJDK.17`, then open a **new** terminal |
+| Astra key | one line in `C:\Users\ibpha\work\projects\.env` (any parent folder of the repo works): `ASTRA_API_KEY=...` (`OPENAI_API_KEY` also accepted; add `OPENAI_BASE_URL=...` if Astra is behind a gateway) |
+| Drawings | PDFs in `..\..\data\all_data\css\pdf` (v1 parsed results in `...\pdf\css_parsed`) |
 
-## API (selection)
+No docker is used anywhere.
 
-| method | path | purpose |
+## 2. First-time setup
+
+Open PowerShell in the repo folder (`C:\Users\ibpha\work\projects\substation\code\substation_retrieval`):
+
+```powershell
+# a) Python environment
+uv venv
+uv pip install -r requirements.txt
+uv pip install -r requirements-optional.txt     # ezdxf, anthropic, pytest
+uv pip install -e .                             # installs the `sr` command into .venv
+
+# b) JanusGraph (graph database): download once (~400 MB) and configure
+powershell -ExecutionPolicy Bypass -File scripts\janusgraph\setup.ps1
+```
+
+## 3. Run (every time)
+
+**Terminal 1: start JanusGraph** and leave the window open:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\janusgraph\start.ps1
+```
+
+**Terminal 2: the app.**
+
+```powershell
+.\.venv\Scripts\activate
+sr janus-check        # JanusGraph reachable? creates the vid/pk indexes on first run
+sr import-v1          # first run only: loads the 50 reviewed drawings into JanusGraph + RAG index (no LLM cost, ~20 s)
+sr serve              # http://127.0.0.1:8077
+```
+
+`.\run.ps1` does the install, the check, the first-run import and `serve` in one go, once JanusGraph is running.
+
+## 4. Extract drawings with Astra (real LLM extraction v2)
+
+```powershell
+sr health                                                  # "llm": {"available": true, "model": "gpt-6-astra"}
+sr extract "..\..\data\all_data\css\pdf\CSS layout 10.02.25.pdf" --out var\test_v2.json   # one drawing, not indexed
+sr extract-all --workers 4                                 # all PDFs in paths.data_dir, report vs v1
+sr extract-all --workers 4 --index                         # same, and replace the v1 entries in the graph + index
+```
+
+What `extract-all` writes:
+
+- `var\extractions\<doc_id>\doc.json` for each drawing
+- debug artifacts in `var\artifacts\<doc_id>\`: page renders, layout crops, overlays, `masks\*.png`, raw LLM JSON
+- a comparison CSV in `var\reports\extract_v2_<time>.csv`, covering substations, equipment, transformers,
+  room L/W, clear height, scale source, section and kVA (v2 vs v1)
+
+LLM answers are cached by file hash + prompt version, so re-runs only pay for what changed.
+
+Adding new drawings later, one at a time or in bulk:
+
+```powershell
+sr ingest "D:\new_drawings\Site A.pdf" --no-v1 --wait   # --no-v1 forces Astra even if a v1 result exists
+sr ingest "D:\new_drawings" --no-v1 --wait              # a whole folder
+```
+
+You can also use the UI: **Library & ingest → choose files → untick "reuse v1 extraction" → Upload & ingest**.
+Each file is a job: extract → review gate → JanusGraph upsert → RAG upsert → new index version.
+
+## 5. Using the UI
+
+- **Chat.** Type a requirement, for example:
+  *"indoor CSS on ground floor, 2 x 1500 kVA dry DT, 1 RMU, 4 LTP, room 11 x 8 m, clear height 4.5 m, rolling shutter, nalla 4 m away"*.
+  - **Attach site plan** takes a PNG/JPG/PDF with the proposed CSS area marked in red. Blue = nalla,
+    yellow = wayleave, green = trench. Enter the long side in mm for scale.
+  - Each result card shows the score, verdict, checks and an **Overlay on new site**. The tabs on the card
+    switch to the original **Equipment layout**, **Section**, **Site plan** and **Masks**.
+  - Follow-up questions ("why is #2 lower?") are answered from the last results.
+- **Site graph.** Pick a drawing.
+  - **Design graph (tree)** is the original left-to-right view: click a group to fold it, click a box to see
+    its vertex. **Network** is the force view.
+  - The side panel lists the site summary.
+  - Below it are the extracted geometry and **the drawing with the extracted masks**: toggle each class, or
+    click a layout to zoom to it.
+- **Ontology.** The class tree with instance counts; click a class for its fields and usage.
+- **Admin.** Switch the KG / RAG engines on or off, set the retrieval mode (`auto` = KG then RAG fallback),
+  and view health and index versions.
+
+## 6. Optional: DINOv2 image embeddings (tiny variant)
+
+```powershell
+uv pip install torch --index-url https://download.pytorch.org/whl/cpu   # CPU-only torch (~200 MB)
+uv pip install -r requirements-ml.txt                                   # transformers
+sr setup-embedder        # saves facebook/dinov2-small (ViT-S/14, 22M params) to var\models
+sr rebuild               # embeds every substation's mask raster (no LLM)
+```
+
+The setting is `engines.rag.image_embedder: dinov2`, and it is on by default. Without torch it stays inactive
+and logs one line.
+
+## 7. Configuration
+
+`config\settings.yaml` holds all knobs. Environment variables override them:
+
+| Setting | Env var | Default |
 |---|---|---|
-| POST | `/api/chat` | conversational search; follow-ups answered from the last results |
-| POST | `/api/search` | `{text, structured, siteplan_id, mode, k}` |
-| POST | `/api/siteplan` | upload a builder plan (red = proposed CSS area; blue nalla, yellow wayleave, green trench) |
-| POST | `/api/ingest` | multipart files → jobs. `/api/ingest/paths` takes server-side files / folders (AEML integration hook) |
-| GET | `/api/jobs`, `/api/documents`, `/api/versions` | status |
-| GET | `/api/documents/{id}/graph`, `/geometry` | per-site knowledge graph and extracted geometry |
-| GET | `/api/ontology` | class tree with instance counts (always available) |
-| GET/PUT | `/api/engines` | `retrieval_mode`, `kg_enabled`, `rag_enabled` |
-| GET | `/api/health` | engines, graph, index, jobs, LLM |
+| graph backend | `SR_GRAPH_BACKEND` | `janusgraph` (`sqlite` = tests/offline only) |
+| JanusGraph URL | `SR_GREMLIN_URL` | `ws://localhost:8182/gremlin` |
+| retrieval mode | `SR_RETRIEVAL_MODE` | `auto` (`kg`, `rag`, `both`) |
+| engines on/off | `CSS_KG_ENABLED`, `CSS_RAG_ENABLED` | `true` |
+| LLM model / style | `SR_LLM_MODEL`, `SR_LLM_API_STYLE` | `gpt-6-astra`, `responses` (`chat` for gateways) |
+| drawings / v1 / workspace | `SR_DATA_DIR`, `SR_V1_DIR`, `SR_VAR_DIR` | `..\..\data\all_data\css\pdf`, `...\css_parsed`, `.\var` |
+
+The scoring weights, verdict thresholds (0.80 / 0.60), plot-clearance norms and catalogue tolerances are also in
+`settings.yaml`.
+
+## 8. Workspace (`var\`, gitignored)
+
+| Path | Content |
+|---|---|
+| `var\janusgraph\` | JanusGraph install + its data (`data\berkeley`, `data\lucene`) |
+| `var\db\index.sqlite` | document registry, RAG index (features, mask rasters, text, image embeddings), index versions |
+| `var\db\jobs.sqlite` | ingest job queue |
+| `var\extractions\<doc_id>\doc.json` | schema-2.1 extraction per drawing (source of truth for `sr rebuild`) |
+| `var\artifacts\<doc_id>\` | page renders, crops, overlays, masks, raw LLM JSON |
+| `var\cache\llm\`, `var\models\`, `var\reports\` | LLM cache, DINOv2 weights, extraction reports |
+
+## 9. Commands
+
+```
+sr serve | import-v1 | ingest PATH... [--wait] [--no-v1] [--force] | extract FILE | extract-all [--workers N] [--index]
+sr rebuild | search "TEXT" [--mode kg|rag|auto|both] | jobs | health | versions | janus-check | setup-embedder | worker
+python -m pytest        # 18 tests, synthetic data, no network
+```
+
+## 10. Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| `JanusGraph at ws://localhost:8182 is not reachable` | start `scripts\janusgraph\start.ps1`; check `java -version` ≥ 11 |
+| `HADOOP_HOME is not set` from JanusGraph | re-run `setup.ps1` (it downloads `winutils.exe`) |
+| `"llm": {"available": false}` | the key line is missing in `.env`; check the name `ASTRA_API_KEY` or `OPENAI_API_KEY` |
+| Astra 404 / connection error | set `OPENAI_BASE_URL` for your gateway, or `SR_LLM_API_STYLE=chat` |
+| Search says "fallback to RAG" | expected when the query is thin, or JanusGraph is down; see the trace line |
+| Masks / drawing views say "no image" | for v1 drawings, `SR_V1_DIR` must point at `css_parsed`; for v2, keep `var\artifacts` |
 
 ## Layout
 
 ```
 src/substation_retrieval/
   core/        schema 2.1, ontology, equipment catalogue + rules, utils
-  geometry/    polygons, ALS (alignment + set matching), compatibility checks, mask rasters
-  extraction/  PDF/DXF/DWG adapters, LLM client + prompts, segmentation, scale, pipeline, v1 importer
-  kg/          partition builder, SQLite + Gremlin stores, KG matcher
+  geometry/    polygons, ALS (alignment + set matching), compatibility checks, mask rasters, DINOv2 embedder
+  extraction/  PDF/DXF/DWG adapters, Astra client + prompts, segmentation, scale, pipeline, batch, v1 importer
+  kg/          partition builder, JanusGraph (Gremlin) + SQLite stores, KG matcher
   rag/         index (SQLite) + RAG engine
   retrieval/   query model + parser, site-plan encoder, shared scoring, orchestrator, overlays
   ingest/      job queue + workers, ingestion service
   chat/        chat agent
-  api/         FastAPI app + static UI
-scripts/janusgraph/   JanusGraph configs (BerkeleyDB-JE/Lucene local, Bigtable on GCP) + schema
+  api/         FastAPI app, tree views, drawing/mask images, static UI
+scripts/janusgraph/   setup + start (Windows / Linux), schema.groovy, Bigtable config for GCP
 ```
-
-## Scoring summary
-
-- **Presence rule.** A score component is used only when the query supplies it. Coverage reports how much of
-  the scoring the query could use.
-- **ALS weights.** footprint 3, equipment positions 3, columns/beams 3, cutouts 2, doors 2, height 2, trench 1,
-  louvres 0.5, site 1.
-- **Pose search.** 8 poses (4 rotations × mirror), then ±10° and ICP refinement.
-- **S_KG.** `0.30 nodes + 0.25 edges + 0.30 geometry + 0.15 facets`, times `c_count` when a substation count is
-  given, times the hard-facet penalty when installation, arrangement or voltage contradicts the query.
-- **Verdict.** `reuse` at ≥ 0.80 with no failed check; `adapt` at ≥ 0.60; otherwise `new`.
-- **Compatibility checks:**
-  - footprint fit and equipment inside the new outline
-  - catalogue slot fit for requested kVA / ways
-  - clear height vs tallest equipment + 450 mm tray rule and the 4.2 m CSS minimum
-  - beams, columns and slab cutouts of the new site
-  - door width for transformer moves (2750 mm)
-  - trench
-  - plot clearances for the historic layout placed at the new site, and the historic design's own violations:
-    nalla 6 m, DP road 4.5 m, internal road 1.5 m, compound wall 1.5 m, structure 6 m, tree 1.5 m (4.5 m at doors)

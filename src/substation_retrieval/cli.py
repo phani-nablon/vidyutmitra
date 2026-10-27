@@ -6,6 +6,8 @@
   worker                   run ingest workers without the API
   rebuild                  re-index every stored extraction (no LLM)
   extract FILE [--out F]   run extraction v2 on one drawing and write the JSON (does not index)
+  extract-all [--dir D] [--workers 4] [--index]   extraction v2 (Astra) on a folder + report vs v1
+  janus-check              JanusGraph connection, counts, indexes
   search "TEXT" [--mode M] [--json FILE] [--k N]
   jobs | health | versions
 """
@@ -39,6 +41,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--wait", action="store_true")
     p.add_argument("--force", action="store_true")
     p.add_argument("--no-v1", action="store_true")
+    p = sub.add_parser("extract-all", help="extraction v2 with Astra on every drawing in a folder + report vs v1")
+    p.add_argument("--dir")
+    p.add_argument("--workers", type=int, default=4)
+    p.add_argument("--limit", type=int)
+    p.add_argument("--index", action="store_true", help="also upsert into the graph + RAG index")
+    sub.add_parser("janus-check", help="check the JanusGraph connection and indexes")
+    sub.add_parser("setup-embedder", help="download DINOv2-small into var/models (needs requirements-ml.txt)")
     sub.add_parser("worker")
     sub.add_parser("rebuild")
     p = sub.add_parser("extract")
@@ -81,6 +90,22 @@ def main(argv: list[str] | None = None) -> int:
             for j in sv.jobs.list(batch_id=r["batch_id"]):
                 print(f"{j['status']:16} {j['file_name']}  {j.get('message') or j.get('error') or ''}")
             print(f"processed {n}")
+    elif a.cmd == "extract-all":
+        from .extraction.batch import run
+        run(sv, Path(a.dir) if a.dir else sv.settings.path("paths.data_dir"), a.workers, a.limit, a.index)
+    elif a.cmd == "setup-embedder":
+        from transformers import AutoImageProcessor, AutoModel
+        mid = sv.settings.get("engines.rag.image_model", "facebook/dinov2-small")
+        out = sv.settings.var("models", mid.split("/")[-1], mkdir=False)
+        out.mkdir(parents=True, exist_ok=True)
+        AutoImageProcessor.from_pretrained(mid).save_pretrained(out)
+        AutoModel.from_pretrained(mid).save_pretrained(out)
+        print(f"saved {mid} to {out}; now run `sr rebuild` to embed every substation raster")
+    elif a.cmd == "janus-check":
+        st = sv.store
+        print(json.dumps(st.stats(), indent=1, default=str))
+        if hasattr(st, "ensure_schema"):
+            print("indexes created now:", st.ensure_schema())
     elif a.cmd == "worker":
         sv.ingest.start_workers(1)
         print("worker running (Ctrl+C to stop)")

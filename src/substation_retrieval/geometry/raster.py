@@ -8,6 +8,7 @@ of the clean raster can be plugged in through `image_embedder()`; it is skipped 
 from __future__ import annotations
 
 import math
+from pathlib import Path
 
 import numpy as np
 
@@ -109,26 +110,57 @@ def to_png(R: np.ndarray, path) -> None:
     cv2.imwrite(str(path), cv2.resize(img, (GRID * 4, GRID * 4), interpolation=cv2.INTER_NEAREST))
 
 
-_EMBEDDER = None
+class ImageEmbedder:
+    """DINOv2 embedding of the clean mask raster (RAG shortlist feature).
 
+    Default model: facebook/dinov2-small (ViT-S/14, 22M parameters, CPU is fine). Loaded from
+    var/models/<name> when `sr setup-embedder` has saved it there, else from the Hugging Face hub.
+    Needs `torch` + `transformers` (requirements-ml.txt). Query rasters are embedded in all 8 poses and the
+    best cosine is used, so mirrored / rotated designs still match.
+    """
 
-def image_embedder():
-    """Optional DINOv2 embedder; returns None when torch/transformers are unavailable."""
-    global _EMBEDDER
-    if _EMBEDDER is not None:
-        return _EMBEDDER or None
-    try:  # pragma: no cover - heavy optional dependency
+    def __init__(self, model_id: str = "facebook/dinov2-small", model_dir=None):
         import torch
         from transformers import AutoImageProcessor, AutoModel
-        proc = AutoImageProcessor.from_pretrained("facebook/dinov2-small")
-        model = AutoModel.from_pretrained("facebook/dinov2-small").eval()
+        src = str(model_dir) if model_dir and Path(model_dir).exists() else model_id
+        self.torch = torch
+        self.proc = AutoImageProcessor.from_pretrained(src)
+        self.model = AutoModel.from_pretrained(src).eval()
+        self.name = model_id
 
-        def emb(R: np.ndarray) -> np.ndarray:
-            img = np.stack([R[0] * 200, R[1] * 255, (R[2] | R[4]) * 255], -1).astype(np.uint8)
-            with torch.no_grad():
-                out = model(**proc(images=img, return_tensors="pt")).pooler_output[0].numpy()
-            return out / (np.linalg.norm(out) + 1e-9)
-        _EMBEDDER = emb
-    except Exception:
-        _EMBEDDER = False
-    return _EMBEDDER or None
+    @staticmethod
+    def to_image(R: np.ndarray) -> np.ndarray:
+        """Channels -> RGB: room grey, equipment blue, openings orange, cutouts/structure red, trench green."""
+        img = np.full((GRID, GRID, 3), 255, np.uint8)
+        img[R[0] > 0] = (210, 210, 210)
+        img[R[6] > 0] = (29, 158, 117)
+        img[(R[4] > 0) | (R[5] > 0)] = (225, 29, 93)
+        img[(R[2] > 0) | (R[3] > 0)] = (234, 138, 12)
+        img[R[1] > 0] = (37, 99, 235)
+        return img
+
+    def embed_many(self, rasters: list[np.ndarray]) -> np.ndarray:
+        imgs = [self.to_image(r) for r in rasters]
+        with self.torch.no_grad():
+            out = self.model(**self.proc(images=imgs, return_tensors="pt"))
+            v = out.pooler_output if getattr(out, "pooler_output", None) is not None else out.last_hidden_state[:, 0]
+            v = v.numpy().astype(np.float32)
+        return v / (np.linalg.norm(v, axis=1, keepdims=True) + 1e-9)
+
+    def embed(self, R: np.ndarray) -> np.ndarray:
+        return self.embed_many([_centre(R)])[0]
+
+    def embed_poses(self, R: np.ndarray) -> np.ndarray:
+        return self.embed_many([_centre(p) for p in _poses(R)])
+
+
+def load_image_embedder(settings, log=print):
+    """Returns an ImageEmbedder when engines.rag.image_embedder == 'dinov2' and torch/transformers are installed."""
+    if str(settings.get("engines.rag.image_embedder", "none")).lower() != "dinov2":
+        return None
+    model_id = settings.get("engines.rag.image_model", "facebook/dinov2-small")
+    try:
+        return ImageEmbedder(model_id, settings.var("models", model_id.split("/")[-1], mkdir=False))
+    except Exception as e:
+        log(f"image embedder unavailable ({type(e).__name__}: {e}); install requirements-ml.txt and run `sr setup-embedder`")
+        return None

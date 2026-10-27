@@ -64,7 +64,21 @@ def check_all(query: dict, q: RoomGeom, r: RoomGeom, pose: Pose, sub: dict, doc:
         elif posed_eq:
             checks.append(_chk("equipment_inside", "pass", f"all {len(posed_eq)} equipment footprints fit inside the new outline"))
 
-    # 2. requested equipment vs historic slots (catalogue dimensions)
+    # 2a. requested equipment counts vs the historic design
+    have = sub.get("counts") or {}
+    if not have:
+        for i in r.groups.get("equipment", []):
+            have[base_equipment_type(i.cls)] = have.get(base_equipment_type(i.cls), 0) + 1
+    for t, n in (query.get("counts") or {}).items():
+        m = int(have.get(t, 0))
+        if m < n:
+            checks.append(_chk(f"count_{t}", "fail", f"historic design has {m} {t}, {n} requested"))
+        elif m > n:
+            checks.append(_chk(f"count_{t}", "warn", f"historic design has {m} {t}, {n} requested (extra space / equipment)"))
+        else:
+            checks.append(_chk(f"count_{t}", "pass", f"{n} {t} as requested"))
+
+    # 2b. requested equipment vs historic slots (catalogue dimensions)
     items = query.get("equipment_items") or []
     for it in items:
         if not (it.get("kva") or it.get("ways") or it.get("subtype")):

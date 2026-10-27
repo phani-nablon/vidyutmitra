@@ -42,7 +42,7 @@ ONTOLOGY = C("css", "CSS layout", desc="Consumer substation designs (AEML) and t
         C("compound_wall", "Compound wall", "site_feature", ["polyline_mm", "distance_mm"], "plot clearance (1.5 m)"),
         C("structure", "Adjacent structure", "site_feature", ["polygon_mm", "distance_mm"], "plot clearance (6 m)"),
     ]),
-    C("equipment", "Equipment", color="#2563EB", desc="Electrical equipment placed in the substation.", children=[
+    C("electrical", "Electrical", color="#2563EB", desc="Electrical equipment placed in the substation.", children=[
         C("transformer", "Distribution transformer", "equipment", ["kva", "L_mm", "B_mm", "H_mm", "weight_kg"], "equipment, fit", children=[
             C("transformer_dry", "Dry-type transformer", "equipment"),
             C("transformer_oil", "Oil / ester transformer", "equipment"),

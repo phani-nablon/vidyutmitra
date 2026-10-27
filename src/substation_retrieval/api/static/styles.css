@@ -95,3 +95,24 @@ svg text { font-size: 10px; fill: var(--ink); pointer-events: none; }
 .gallery a { display: block; font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
 .gallery img { width: 100%; border-radius: 6px; border: 1px solid var(--line); background: #fff; }
 .switch { display: block; margin: 6px 0; }
+
+/* tree view (design graph / ontology) */
+.tree-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 12px; }
+@media (max-width: 1000px) { .tree-layout { grid-template-columns: 1fr; } }
+.tree-wrap { overflow: auto; max-height: 720px; background: var(--bg); border-radius: 8px; border: 1px solid var(--line); }
+.tree-wrap svg text { font-size: 12px; }
+.tree-wrap .node { cursor: pointer; }
+.tree-wrap .node:hover rect { stroke-width: 2; }
+.info { border-left: 1px solid var(--line); padding-left: 12px; max-height: 720px; overflow: auto; }
+.info table td { padding: 3px 6px; font-size: 12px; }
+.legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; margin: 6px 0; }
+.legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; background: var(--c); vertical-align: -1px; }
+
+.viewtabs { display: flex; gap: 4px; flex-wrap: wrap; margin: 6px 0 4px; }
+.vt { font-size: 11px; padding: 3px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--muted); cursor: pointer; }
+.vt.active { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+img.drawing { width: 100%; max-height: 520px; object-fit: contain; background: #fff; border-radius: 8px; border: 1px solid var(--line); }
+.mk::before { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 2px; background: var(--c); margin-right: 3px; }
+.info h4 { margin: 10px 0 4px; }
+#site-art .row label { white-space: nowrap; }
+#site-art .gallery { margin-top: 8px; }

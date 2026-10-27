@@ -57,3 +57,31 @@ def test_incremental_delete_bumps_version(services):
     assert services.store.partition(doc_id)["vertices"] == []
     services.ingest.rebuild(log_fn=lambda m: None)   # deleted stays deleted
     assert services.index.stats()["documents"] == 4
+
+
+def test_image_embedder_wiring(services):
+    """The DINOv2 path with a stand-in embedder (no torch in CI): embeddings are stored and used by RAG."""
+    import numpy as np
+    from substation_retrieval.geometry import raster as R
+
+    class Fake:
+        name = "fake-dinov2"
+
+        def embed(self, r):
+            v = np.array([r[0].sum(), r[1].sum(), r[2].sum() + 1.0], np.float32)
+            return v / np.linalg.norm(v)
+
+        def embed_poses(self, r):
+            return np.stack([self.embed(p) for p in R._poses(r)])
+
+    services.ingest.image_embedder = Fake()
+    services.rag.image_embedder = Fake()
+    try:
+        services.ingest.rebuild(log_fn=lambda m: None)
+        assert all(s["img_embedding"] is not None for s in services.index.substations())
+        q = build_query("indoor 2 x 1500 kVA DT", {"site_polygon_mm": [[0, 0], [11000, 0], [11000, 8000], [0, 8000]]})
+        res = services.orchestrator.search(q, 3, "rag")
+        assert "image_embedding" in res["results"][0]["components"]
+    finally:
+        services.ingest.image_embedder = None
+        services.rag.image_embedder = None

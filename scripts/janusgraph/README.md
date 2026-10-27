@@ -1,22 +1,24 @@
-# JanusGraph backend (optional, no docker)
+# JanusGraph (default knowledge-graph store, no docker)
 
-The default graph store is SQLite on disk (`var/db/kg.sqlite`). It is persistent and needs no server.
-Switch to JanusGraph when the corpus grows or several services must share the graph:
-the code talks Gremlin bytecode (`gremlinpython`), so the same store works for JanusGraph locally and on GCP.
+The app talks to JanusGraph over Gremlin (`ws://127.0.0.1:8182/gremlin`, `gremlinpython` bytecode).
+Storage is embedded BerkeleyDB-JE with a Lucene index, kept under `var/janusgraph/data` (gitignored).
+On first connect the app creates the composite indexes it needs (`schema.groovy`: vid, pk, cls, edge pk).
 
-## Local (single machine)
-1. Install Java 11+ and download the JanusGraph *full* zip (1.0.x) from the JanusGraph releases page; unzip it.
-2. Copy `janusgraph-berkeleyje-lucene.properties` into `<janusgraph>/conf/` and point
-   `conf/gremlin-server/gremlin-server.yaml` -> `graphs: { graph: conf/janusgraph-berkeleyje-lucene.properties }`.
-3. Start: `bin/janusgraph-server.sh console` (Linux/macOS) or `bin\janusgraph-server.bat` (Windows).
-4. Create the schema once: `bin/gremlin.sh` then `:remote connect tinkerpop.server conf/remote.yaml session`,
-   `:remote console`, `:load <repo>/scripts/janusgraph/schema.groovy`.
-5. In the repo: `uv pip install gremlinpython`, set `SR_GRAPH_BACKEND=gremlin` (and `SR_GREMLIN_URL` if not
-   `ws://localhost:8182/gremlin`), then `sr rebuild` to load every stored extraction into JanusGraph.
+## Windows
+1. Java 17: `winget install Microsoft.OpenJDK.17` (open a new terminal afterwards).
+2. `powershell -ExecutionPolicy Bypass -File scripts\janusgraph\setup.ps1`
+   downloads JanusGraph 1.1.0 (~400 MB, once) and `winutils.exe`, writes the config.
+3. `powershell -ExecutionPolicy Bypass -File scripts\janusgraph\start.ps1` (leave the window open).
+4. In another terminal: `sr janus-check`, then `sr import-v1` (or `sr rebuild`) to load the graph.
+
+## Linux / macOS
+`scripts/janusgraph/setup.sh` then `scripts/janusgraph/start.sh`.
 
 ## GCP
-Use `janusgraph-bigtable.properties` (Cloud Bigtable storage + Elasticsearch for mixed indexes), run JanusGraph
-Server on a GCE VM or GKE, and point `SR_GREMLIN_URL` at it. Nothing in the application changes.
+Point `graph.gremlin_url` (or `SR_GREMLIN_URL`) at a JanusGraph Server whose graph uses Cloud Bigtable
+(`janusgraph-bigtable.properties`) and Elasticsearch for mixed indexes. Nothing in the app changes.
 
-If the Gremlin server is unreachable at start-up the app logs it and falls back to SQLite; in `auto` retrieval
-mode a slow or failing graph also falls back to RAG for that query.
+## If JanusGraph is down
+The KG engine reports unavailable; `auto` retrieval mode answers with RAG and says so in the trace;
+ingestion jobs fail with a clear message; the ontology view still works. `graph.backend: sqlite` exists only
+for tests and offline work.

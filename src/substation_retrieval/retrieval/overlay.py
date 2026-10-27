@@ -26,7 +26,9 @@ def overlay(q: dict, doc: dict, sid: str, refine_deg: float = 10.0) -> dict | No
     return {"query_outline": P.coords(qg.outline) if qg.outline is not None else None,
             "room": P.coords(pose.apply(rg.outline)) if rg.outline is not None else None,
             "items": items, "query_items": qitems, "site_features": feats, "pose": pose.as_dict(),
-            "name": sub.get("name"), "clear_height_mm": sub["civil"].get("clear_height_mm")}
+            "name": sub.get("name"), "clear_height_mm": sub["civil"].get("clear_height_mm"),
+            "equipment_layout_id": sub.get("equipment_layout_id"), "section_layout_id": sub.get("section_layout_id"),
+            "site_layout_id": (doc.get("site") or {}).get("layout_id"), "page": sub.get("page") or 1}
 
 
 def substation_geometry(doc: dict) -> list[dict]:

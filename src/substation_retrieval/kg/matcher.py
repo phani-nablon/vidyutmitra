@@ -59,7 +59,9 @@ def query_graph(q: dict, qg: RoomGeom, rules: dict) -> dict:
     n = 0
     for it in q.get("equipment_items") or []:
         cls = equipment_class(it.get("type"), None, it.get("dt_kind"))
-        row = catalogue.lookup(cls, it.get("kva"), it.get("ways"), it.get("dt_kind"), it.get("subtype")) or {}
+        # catalogue dimensions only when the user fixed a size (kVA / ways / subtype): presence rule
+        sized = bool(it.get("kva") or it.get("ways") or it.get("subtype"))
+        row = (catalogue.lookup(cls, it.get("kva"), it.get("ways"), it.get("dt_kind"), it.get("subtype")) or {}) if sized else {}
         for _ in range(min(int(it.get("count") or 1), MAX_UNITS)):
             n += 1
             V.append(QV(f"E{n}", "equipment", cls, {"kva": it.get("kva"), "ways": it.get("ways"),
@@ -165,7 +167,12 @@ def _cand(part: dict, sid: str):
             facets.setdefault(k, []).append(val)
     facets["kva"] = [float(x) for x in facets.get("kva", [])]
     cand_vs = list(owned.values()) + list(feats.values())
-    return sv, cand_vs, rg, {"cable": {"routes": routes}}, {"site": {"clearance_checks": own_checks}}, facets
+    counts: dict[str, int] = {}
+    for v in owned.values():
+        if v["label"] == "equipment":
+            b = base_equipment_type(v["props"].get("cls") or "")
+            counts[b] = counts.get(b, 0) + 1
+    return sv, cand_vs, rg, {"cable": {"routes": routes}, "counts": counts}, {"site": {"clearance_checks": own_checks}}, facets
 
 
 def _attr_sim(qv: QV, cv: dict) -> float:
@@ -206,7 +213,7 @@ def match_substation(qgraph, q, qg, part, sid, deg, n_docs, edge_df, settings) -
             for j, cv in enumerate(cvs):
                 ccls = cv["props"].get("cls") or ""
                 t = wu_palmer(qv.cls, ccls)
-                if t <= 0:
+                if t < 0.5:          # only same-kind vertices pair (transformer variants yes, transformer vs LTP no)
                     continue
                 s = t * _attr_sim(qv, cv)
                 if qv.geom is not None:
@@ -223,6 +230,19 @@ def match_substation(qgraph, q, qg, part, sid, deg, n_docs, edge_df, settings) -
         qcls = {v.cls for v in qvs}
         relevant = [cv for cv in cvs if max((wu_palmer(c, cv["props"].get("cls") or "") for c in qcls), default=0) >= 0.5]
         node_score = 2 * sum(m[2] for m in matched) / (len(qvs) + len(relevant)) if (qvs or relevant) else None
+        # per-type count agreement: asking for 2 transformers and finding 1 must cost more than an extra louvre
+        qn: dict[str, int] = {}
+        for v in qvs:
+            if v.label == "equipment":
+                qn[base_equipment_type(v.cls)] = qn.get(base_equipment_type(v.cls), 0) + 1
+        if qn and node_score is not None:
+            cn: dict[str, int] = {}
+            for cv in cvs:
+                if cv["label"] == "equipment":
+                    b = base_equipment_type(cv["props"].get("cls") or "")
+                    cn[b] = cn.get(b, 0) + 1
+            agree = [2 * min(n, cn.get(t, 0)) / (n + cn.get(t, 0)) for t, n in qn.items()]
+            node_score *= sum(agree) / len(agree)
         for i, j, s in matched:
             qv, cv = qvs[i], cvs[j]
             pair_map[qv.qid] = cv["vid"]
@@ -301,6 +321,13 @@ class KGEngine:
             self._parts = {}
             self._cache_version = v
 
+    def warm(self) -> int:
+        """Preload every partition into the cache (called after start-up and after each new index version)."""
+        self._refresh()
+        pks = [d["doc_id"] for d in self.index.documents()]
+        self._parts.update(self.store.partitions([p for p in pks if p not in self._parts]))
+        return len(self._parts)
+
     def health(self) -> dict:
         t0 = time.time()
         ok = self.store.ping()
@@ -329,10 +356,16 @@ class KGEngine:
         sub_count = {}
         for s in subs:
             sub_count[s["pk"]] = sub_count.get(s["pk"], 0) + 1
-        limit = max(int(self.settings.get("engines.rag.shortlist", 40)), 60)
-        cand_ids = sorted(hits, key=lambda x: -hits[x])[:limit]
+        limit = int(self.settings.get("engines.kg.max_candidates", 300))
+        cand_ids = sorted(hits, key=lambda x: (-hits[x], x))[:limit]          # deterministic tie order
         if len(cand_ids) < limit:
-            cand_ids += [s["vid"] for s in subs if s["vid"] not in hits][: limit - len(cand_ids)]
+            cand_ids += sorted(s["vid"] for s in subs if s["vid"] not in hits)[: limit - len(cand_ids)]
+        missing = sorted({sid.split(":")[0] for sid in cand_ids} - set(self._parts))
+        if missing:
+            try:
+                self._parts.update(self.store.partitions(missing))
+            except Exception as e:
+                raise KGUnavailable(f"graph partition fetch failed: {type(e).__name__}: {e}")
         results = []
         for sid in cand_ids:
             pk = sid.split(":")[0]

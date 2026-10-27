@@ -1,0 +1,7 @@
+# Optional: DINOv2 image embeddings of the mask rasters (RAG shortlist feature).
+# CPU-only torch keeps the install small:
+#   uv pip install torch --index-url https://download.pytorch.org/whl/cpu
+#   uv pip install -r requirements-ml.txt
+#   sr setup-embedder        (downloads facebook/dinov2-small, 22M params, into var/models)
+#   sr rebuild               (embeds every indexed substation)
+transformers>=4.40

@@ -190,13 +190,15 @@ class Extractor:
         legend: list = []
         title_block: dict = {}
         texts = []
+        page_images: list[dict] = []
         n_pages = min(len(pdf), MAX_PAGES)
         for pi in range(n_pages):
             progress(f"pass 1 page {pi + 1}/{n_pages}", 0.05 + 0.1 * pi / n_pages)
             pg = pdf.page(pi, dpi2)
             texts.append(" ".join(w[4] for w in pg.words))
             W, H = pg.size_px
-            art.img(f"page{pi + 1}.jpg", pg.image)
+            if art.img(f"page{pi + 1}.jpg", pg.image):
+                page_images.append({"page": pi + 1, "base": "artifacts", "file": f"page{pi + 1}.jpg", "size_px": list(pg.size_px)})
             small = pdf.render(pi, dpi1)
             p1 = self._ask(prompts.PASS1, small, f"{sha}__{self.pv}__p{pi + 1}_pass1", art)
             if not md_raw and p1.get("metadata"):
@@ -241,6 +243,7 @@ class Extractor:
                 raw["name"] = spec.get("name") or f"CSS-{len(subs) + 1}"
                 raw["floor"] = plan.get("floor")
                 raw["equipment_layout_id"] = plan["id"]
+                raw["page"] = pi + 1
                 sub = substation_from_px(raw, len(subs))
                 for extra_key in ("_cutouts_mm", "_beams_mm", "_columns_mm", "_routes_mm"):
                     for item in raw.get(extra_key, []):
@@ -274,7 +277,10 @@ class Extractor:
             issues.append("no equipment layout found")
         text = re.sub(r"\s+", " ", " ".join(texts))[:20000]
         segments = [{"id": f"M{i + 1}", **s} for i, s in enumerate(segs_all)]
-        return self._doc(path, sha, doc_id, "llm_v2", md, layouts, subs, site, text, issues, segments, assoc)
+        doc = self._doc(path, sha, doc_id, "llm_v2", md, layouts, subs, site, text, issues, segments, assoc)
+        doc["source"]["page_images"] = page_images
+        doc["source"]["pages"] = len(pdf)
+        return doc
 
     # ------------------------------------------------------------ pass 2 helpers
     def _crop(self, pg, L):
@@ -295,6 +301,7 @@ class Extractor:
     def _plan(self, pdf, pg, L, legend, sha, art, ex):
         crop, box = self._crop(pg, L)
         L["crop_image"] = art.img(f"layouts/{L['id']}.jpg", crop)
+        L["crop_base"] = "artifacts" if L["crop_image"] else None
         out = self._ask(_fill(prompts.PASS2_PLAN, L), crop, f"{sha}__{self.pv}__{L['id']}_plan", art)
         dims = [{"value_mm": d.get("value_mm"), "p1": _n2px(d["p1"], box), "p2": _n2px(d["p2"], box), "text": d.get("text")}
                 for d in out.get("dimensions") or [] if d.get("p1") and d.get("p2")]
@@ -378,6 +385,7 @@ class Extractor:
         for L in secs:
             crop, box = self._crop(pg, L)
             L["crop_image"] = art.img(f"layouts/{L['id']}.jpg", crop)
+            L["crop_base"] = "artifacts" if L["crop_image"] else None
             try:
                 o = self._ask(_fill(prompts.PASS2_SECTION, L), crop,
                               f"{sha}__{self.pv}__{L['id']}_section", art)
@@ -421,6 +429,7 @@ class Extractor:
     def _site(self, pdf, pg, L, legend, sha, art, ex, segs_all) -> dict:
         crop, box = self._crop(pg, L)
         L["crop_image"] = art.img(f"layouts/{L['id']}.jpg", crop)
+        L["crop_base"] = "artifacts" if L["crop_image"] else None
         try:
             out = self._ask(_fill(prompts.PASS2_SITE, L), crop, f"{sha}__{self.pv}__{L['id']}_site", art)
         except LLMUnavailable:

@@ -94,7 +94,7 @@ def feature_score(q: dict, f: dict) -> tuple[float | None, dict[str, float]]:
             parts[k] = math.exp(-abs(math.log(q[k] / f[fk])) / tol) if f.get(fk) else 0.0
     for t, n in (q.get("counts") or {}).items():
         m = (f.get("counts") or {}).get("packaged" if t == "packaged" else t, 0)
-        parts[f"n_{t}"] = math.exp(-0.7 * abs(n - m)) if m else 0.0
+        parts[f"n_{t}"] = math.exp(-1.2 * abs(n - m)) if m else 0.0
     if q.get("kva"):
         cand = f.get("kva") or []
         parts["kva"] = sum(max([kva_sim(k, c) for c in cand] or [0]) for k in q["kva"]) / len(q["kva"])
@@ -108,7 +108,9 @@ def feature_score(q: dict, f: dict) -> tuple[float | None, dict[str, float]]:
             parts[f"site_{k}"] = 1.0 if f.get(k) else 0.0
     if not parts:
         return None, parts
-    return sum(parts.values()) / len(parts), parts
+    # equipment counts and ratings decide reuse far more than generic facets
+    w = {k: (2.5 if k.startswith("n_") or k == "kva" else 1.0) for k in parts}
+    return sum(w[k] * v for k, v in parts.items()) / sum(w.values()), parts
 
 
 def geometry_eval(query: dict, qg: RoomGeom, sub: dict, doc: dict, settings) -> dict:

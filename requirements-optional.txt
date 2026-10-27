@@ -1,5 +1,4 @@
 # Optional backends
-gremlinpython>=3.7      # graph.backend: gremlin  (JanusGraph / Gremlin Server)
 ezdxf>=1.3              # DXF adapter (DWG needs ODA File Converter or LibreDWG on PATH)
 anthropic>=0.40         # llm.provider: anthropic
 pytest>=8.0             # tests

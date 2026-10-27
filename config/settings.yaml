@@ -34,18 +34,23 @@ engines:
     min_typed_vertices: 3      # fewer query vertices than this -> fall back to RAG (auto mode)
     min_candidates: 3          # fewer candidates scoring >= min_score -> fall back (auto mode)
     min_score: 0.40
+    max_candidates: 300        # substations scored per query after the graph shortlist
     weights: { nodes: 0.30, edges: 0.25, geom: 0.30, facets: 0.15 }
   rag:
     enabled: true              # CSS_RAG_ENABLED
     shortlist: 40
-    weights: { text: 0.25, features: 0.35, raster: 0.20, embedding: 0.20 }
+    weights: { text: 0.25, features: 0.35, raster: 0.20, embedding: 0.20, image_embedding: 0.15 }
+    image_embedder: dinov2     # dinov2 | none   (needs requirements-ml.txt; inactive if torch is missing)
+    image_model: facebook/dinov2-small   # ViT-S/14, 22M params; saved to var/models/ by `sr setup-embedder`
     embedding: none            # none | openai   (openai uses the LLM key; model below)
     embedding_model: text-embedding-3-small
 
 graph:
-  backend: sqlite              # SR_GRAPH_BACKEND sqlite | gremlin
+  backend: janusgraph          # SR_GRAPH_BACKEND janusgraph | sqlite (sqlite = tests / offline only)
   gremlin_url: ws://localhost:8182/gremlin   # SR_GREMLIN_URL
   traversal_source: g
+  ensure_schema: true          # create vid / pk composite indexes on start-up
+  fallback_sqlite: false       # if JanusGraph is down: false = KG engine unavailable (auto mode uses RAG)
 
 scoring:
   top_k: 10

@@ -128,6 +128,9 @@ class SqliteGraphStore:
             V += self._rows_v(f"SELECT vid,label,pk,props FROM vertices WHERE vid IN ({q})", tuple(shared))
         return {"vertices": V, "edges": E}
 
+    def partitions(self, pks: list[str]) -> dict[str, dict]:
+        return {pk: self.partition(pk) for pk in pks}
+
     def substations(self):
         return self._rows_v("SELECT vid,label,pk,props FROM vertices WHERE label='substation'")
 
@@ -200,18 +203,44 @@ class SqliteGraphStore:
             pass
 
 
+RESERVED = {"label", "key", "id", "value", "vertex", "edge", "property"}
+
+
+def _ek(k: str) -> str:
+    """JanusGraph reserves some property names; store them prefixed."""
+    return f"p_{k}" if k in RESERVED else k
+
+
+def _dk(k: str) -> str:
+    return k[2:] if k.startswith("p_") and k[2:] in RESERVED else k
+
+
+def _props_in(m: dict) -> dict:
+    out = {}
+    for k, v in m.items():
+        if k in ("vid", "pk"):
+            continue
+        out[_dk(k)] = v[0] if isinstance(v, list) and len(v) == 1 else v
+    return _decode(out)
+
+
 class GremlinGraphStore:
-    """JanusGraph / Gremlin Server via gremlinpython bytecode. Vertices carry `vid` and `pk` properties
-    so native ids never leak; props that are lists/dicts are JSON strings."""
+    """JanusGraph (or any TinkerPop Gremlin Server) via gremlinpython bytecode.
+
+    Vertices carry `vid` (our id) and `pk` (partition = doc_id) as indexed properties, so native ids never
+    leak; list/dict props are JSON strings; JanusGraph-reserved names (label, key, id, value) are stored as
+    p_<name>. Writes are batched (one round trip per `batch` vertices / edges)."""
     name = "gremlin"
 
-    def __init__(self, url: str = "ws://localhost:8182/gremlin", source: str = "g", timeout_s: float = 5.0):
+    def __init__(self, url: str = "ws://localhost:8182/gremlin", source: str = "g", timeout_s: float = 5.0, batch: int = 40):
         from gremlin_python.driver.driver_remote_connection import DriverRemoteConnection
         from gremlin_python.process.anonymous_traversal import traversal
         self.url = url
         self.conn = DriverRemoteConnection(url, source)
         self.g = traversal().with_remote(self.conn)
         self.timeout_s = timeout_s
+        self.batch = batch
+        self._lock = threading.RLock()
 
     def close(self):
         try:
@@ -226,79 +255,139 @@ class GremlinGraphStore:
         except Exception:
             return False
 
-    def _add_vertices(self, V, batch=50):
-        for i in range(0, len(V), batch):
+    def ensure_schema(self, script_path=None) -> list:
+        """Create the composite indexes (vid, pk, cls, edge pk) if missing. Needs script evaluation on the server
+        (enabled in the JanusGraph distribution). Indexes must exist before data is loaded to be used."""
+        from gremlin_python.driver.client import Client
+        p = Path(script_path) if script_path else Path(__file__).resolve().parents[3] / "scripts" / "janusgraph" / "schema.groovy"
+        script = "\n".join(l for l in p.read_text(encoding="utf-8").splitlines() if not l.strip().startswith("//"))
+        c = Client(self.url, "g")
+        try:
+            return c.submit(script).all().result()
+        finally:
+            c.close()
+
+    # ------------------------------------------------------------ writes
+    def _add_vertices(self, V):
+        for i in range(0, len(V), self.batch):
             t = self.g
-            for v in V[i:i + batch]:
+            for v in V[i:i + self.batch]:
                 t = t.addV(v["label"]).property("vid", v["vid"]).property("pk", v["pk"])
                 for k, x in v["props"].items():
-                    t = t.property(k, x)
+                    if x is not None:
+                        t = t.property(_ek(k), x)
             t.iterate()
+
+    def _ids(self, vids) -> dict:
+        from gremlin_python.process.graph_traversal import __
+        from gremlin_python.process.traversal import P as GP
+        out = {}
+        vids = list(vids)
+        for i in range(0, len(vids), 500):
+            for r in self.g.V().has("vid", GP.within(*vids[i:i + 500])).project("v", "id").by("vid").by(__.id_()).to_list():
+                out[r["v"]] = r["id"]
+        return out
 
     def _add_edges(self, E):
         from gremlin_python.process.graph_traversal import __
-        for e in E:
-            t = self.g.V().has("vid", e["out"]).addE(e["label"]).to(__.V().has("vid", e["in"])).property("pk", e.get("pk", ""))
-            for k, x in e["props"].items():
-                t = t.property(k, x)
+        ids = self._ids({e["out"] for e in E} | {e["in"] for e in E})
+        E = [e for e in E if e["out"] in ids and e["in"] in ids]
+        for i in range(0, len(E), self.batch):
+            t = self.g
+            for e in E[i:i + self.batch]:
+                t = t.addE(e["label"]).from_(__.V(ids[e["out"]])).to(__.V(ids[e["in"]])).property("pk", e.get("pk", ""))
+                for k, x in e["props"].items():
+                    if x is not None:
+                        t = t.property(_ek(k), x)
             t.iterate()
 
     def upsert_partition(self, pk, V, E):
-        self.delete_partition(pk)
-        self._add_vertices(V)
-        self._add_edges(E)
+        with self._lock:
+            self.delete_partition(pk)
+            self._add_vertices(V)
+            self._add_edges([{**e, "pk": pk} for e in E])
 
     def delete_partition(self, pk):
-        self.g.V().has("pk", pk).drop().iterate()
+        with self._lock:
+            self.g.V().has("pk", pk).drop().iterate()
 
     def upsert_shared(self, V, E):
         from gremlin_python.process.graph_traversal import __
-        for v in V:
-            t = self.g.V().has("vid", v["vid"]).fold().coalesce(__.unfold(), __.addV(v["label"]).property("vid", v["vid"]).property("pk", v["pk"]))
-            for k, x in v["props"].items():
-                t = t.property(k, x)
-            t.iterate()
-        for e in E:
-            exists = self.g.V().has("vid", e["out"]).outE(e["label"]).where(__.inV().has("vid", e["in"])).limit(1).count().next()
-            if not exists:
-                self._add_edges([e])
+        with self._lock:
+            have = set(self._ids([v["vid"] for v in V])) if V else set()
+            new = [v for v in V if v["vid"] not in have]
+            self._add_vertices(new)
+            if E:
+                existing = set()
+                for r in (self.g.E().has("pk", P_within([e["pk"] for e in E])).project("l", "o", "i")
+                          .by(__.label()).by(__.outV().values("vid")).by(__.inV().values("vid")).to_list()):
+                    existing.add((r["l"], r["o"], r["i"]))
+                self._add_edges([e for e in E if (e["label"], e["out"], e["in"]) not in existing])
 
     def replace_edges(self, label, E):
-        self.g.E().hasLabel(label).drop().iterate()
-        self._add_edges(E)
+        with self._lock:
+            self.g.E().hasLabel(label).drop().iterate()
+            self._add_edges(E)
 
-    def _vmap(self, t):
+    # ------------------------------------------------------------ reads
+    def _vrows(self, t) -> list[dict]:
+        from gremlin_python.process.graph_traversal import __
         out = []
-        for r in t.valueMap().to_list():
-            props = {k: (v[0] if isinstance(v, list) and len(v) == 1 else v) for k, v in r.items()}
-            vid, pk = props.pop("vid", None), props.pop("pk", None)
-            out.append({"vid": vid, "pk": pk, "props": _decode(props)})
+        for r in t.project("l", "m").by(__.label()).by(__.valueMap()).to_list():
+            m = r["m"]
+            first = lambda x: x[0] if isinstance(x, list) and x else x  # noqa: E731
+            out.append({"vid": first(m.get("vid")), "label": r["l"], "pk": first(m.get("pk")), "props": _props_in(m)})
         return out
 
-    def partition(self, pk):
+    def _erows(self, t) -> list[dict]:
         from gremlin_python.process.graph_traversal import __
-        V = []
-        for r in self.g.V().has("pk", pk).project("label", "m").by(__.label()).by(__.valueMap()).to_list():
-            props = {k: (v[0] if isinstance(v, list) and len(v) == 1 else v) for k, v in r["m"].items()}
-            vid, p = props.pop("vid", None), props.pop("pk", None)
-            V.append({"vid": vid, "label": r["label"], "pk": p, "props": _decode(props)})
-        E = []
-        for r in (self.g.V().has("pk", pk).outE().project("label", "out", "in", "m")
-                  .by(__.label()).by(__.outV().values("vid")).by(__.inV().values("vid")).by(__.valueMap()).to_list()):
-            props = {k: v for k, v in r["m"].items() if k != "pk"}
-            E.append({"label": r["label"], "out": r["out"], "in": r["in"], "props": _decode(props)})
+        return [{"label": r["l"], "out": r["o"], "in": r["i"], "props": _props_in(r["m"])}
+                for r in t.project("l", "o", "i", "m").by(__.label()).by(__.outV().values("vid")).by(__.inV().values("vid"))
+                .by(__.valueMap()).to_list()]
+
+    def partition(self, pk):
+        V = self._vrows(self.g.V().has("pk", pk))
+        E = self._erows(self.g.V().has("pk", pk).outE())
         ids = {v["vid"] for v in V}
-        for vid in {e["in"] for e in E if e["in"] not in ids}:
-            for r in self.g.V().has("vid", vid).project("label", "m").by(__.label()).by(__.valueMap()).to_list():
-                props = {k: (v[0] if isinstance(v, list) and len(v) == 1 else v) for k, v in r["m"].items()}
-                V.append({"vid": props.pop("vid", vid), "label": r["label"], "pk": props.pop("pk", "_shared"), "props": _decode(props)})
+        shared = sorted({e["in"] for e in E if e["in"] not in ids})
+        for i in range(0, len(shared), 500):
+            V += self._vrows(self.g.V().has("vid", P_within(shared[i:i + 500])))
         return {"vertices": V, "edges": E}
 
+    def partitions(self, pks: list[str]) -> dict[str, dict]:
+        """Many partitions in three round trips per 200 (vertices, edges, shared targets)."""
+        out = {pk: {"vertices": [], "edges": []} for pk in pks}
+        for i in range(0, len(pks), 200):
+            chunk = pks[i:i + 200]
+            V = self._vrows(self.g.V().has("pk", P_within(chunk)))
+            owner = {}
+            for v in V:
+                out.setdefault(v["pk"], {"vertices": [], "edges": []})["vertices"].append(v)
+                owner[v["vid"]] = v["pk"]
+            from gremlin_python.process.graph_traversal import __
+            rows = (self.g.V().has("pk", P_within(chunk)).outE().project("l", "o", "i", "m", "pk")
+                    .by(__.label()).by(__.outV().values("vid")).by(__.inV().values("vid")).by(__.valueMap()).by(__.outV().values("pk")).to_list())
+            shared = set()
+            for r in rows:
+                pk = r["pk"]
+                out[pk]["edges"].append({"label": r["l"], "out": r["o"], "in": r["i"], "props": _props_in(r["m"])})
+                if r["i"] not in owner or owner[r["i"]] != pk:
+                    shared.add(r["i"])
+            sv = {}
+            sl = sorted(shared)
+            for j in range(0, len(sl), 500):
+                for v in self._vrows(self.g.V().has("vid", P_within(sl[j:j + 500]))):
+                    sv[v["vid"]] = v
+            for pk in chunk:
+                need = {e["in"] for e in out[pk]["edges"]} - {v["vid"] for v in out[pk]["vertices"]}
+                out[pk]["vertices"] += [sv[x] for x in need if x in sv]
+        return out
+
     def substations(self):
-        return [{**x, "label": "substation"} for x in self._vmap(self.g.V().hasLabel("substation"))]
+        return self._vrows(self.g.V().hasLabel("substation"))
 
     def documents(self):
-        return [{**x, "label": "document"} for x in self._vmap(self.g.V().hasLabel("document"))]
+        return self._vrows(self.g.V().hasLabel("document"))
 
     def facet_degrees(self):
         from gremlin_python.process.graph_traversal import __
@@ -307,29 +396,29 @@ class GremlinGraphStore:
 
     def edge_label_df(self):
         from gremlin_python.process.graph_traversal import __
-        return {k: v for k, v in self.g.E().group().by(__.label()).by(__.values("pk").dedup().count()).next().items()}
+        rows = self.g.E().has("pk", P_neq("_shared")).group().by(__.label()).by(__.values("pk").dedup().count()).to_list()
+        return dict(rows[0]) if rows else {}
 
     def shortlist(self, facets, concepts):
         from gremlin_python.process.graph_traversal import __
-        from gremlin_python.process.traversal import P as GP
         hits: dict[str, int] = defaultdict(int)
         if facets:
-            for vid, n in (self.g.V().has("facet", "vid", GP.within(*facets)).in_("HAS_FACET")
-                           .coalesce(__.hasLabel("substation"), __.out("HAS_SUBSTATION")).groupCount().by("vid").next().items()):
-                hits[vid] += n
+            rows = (self.g.V().has("vid", P_within(facets)).in_("HAS_FACET")
+                    .union(__.hasLabel("substation"), __.hasLabel("document").out("HAS_SUBSTATION")).values("vid").to_list())
+            for vid in rows:
+                hits[vid] += 1
         if concepts:
-            for vid, n in (self.g.V().has("concept", "vid", GP.within(*concepts)).in_("IS_A").in_("CONTAINS")
-                           .hasLabel("substation").groupCount().by("vid").next().items()):
-                hits[vid] += n
+            rows = (self.g.V().has("vid", P_within(concepts)).in_("IS_A")
+                    .union(__.in_("CONTAINS"), __.out("ON_WALL")).hasLabel("substation").values("vid").to_list())
+            for vid in rows:
+                hits[vid] += 1
         return dict(hits)
 
     def neighbours(self, vid, label=None):
-        from gremlin_python.process.graph_traversal import __
         t = self.g.V().has("vid", vid).bothE()
         if label:
             t = t.hasLabel(label)
-        return [{"label": r["label"], "out": r["out"], "in": r["in"], "props": {}} for r in
-                t.project("label", "out", "in").by(__.label()).by(__.outV().values("vid")).by(__.inV().values("vid")).to_list()]
+        return self._erows(t)
 
     def schema_counts(self):
         from gremlin_python.process.graph_traversal import __
@@ -344,17 +433,111 @@ class GremlinGraphStore:
                 "edges": sum(c["edges"].values()), "by_label": c["vertices"]}
 
 
-def open_store(settings, log=print) -> "GraphStore":
-    backend = str(settings.get("graph.backend", "sqlite")).lower()
-    if backend == "gremlin":
-        url = settings.get("graph.gremlin_url")
+def P_within(vals):
+    from gremlin_python.process.traversal import P as GP
+    return GP.within(*list(vals))
+
+
+def P_neq(v):
+    from gremlin_python.process.traversal import P as GP
+    return GP.neq(v)
+
+
+class JanusGraphProxy:
+    """JanusGraph store that (re)connects on demand: if the server is down or still starting, calls raise a
+    clear error (KG engine -> RAG fallback in auto mode) and the next call after `retry_s` tries again."""
+
+    def __init__(self, settings, log=print, retry_s: float = 5.0):
+        self.settings, self.log, self.retry_s = settings, log, retry_s
+        self.url = settings.get("graph.gremlin_url")
+        self._st: GremlinGraphStore | None = None
+        self._next_try = 0.0
+        self.error = None
+        self._lock = threading.Lock()
         try:
-            t0 = time.time()
-            st = GremlinGraphStore(url, settings.get("graph.traversal_source", "g"), settings.get("engines.kg.timeout_s", 5.0))
-            if not st.ping():
-                raise RuntimeError("ping failed")
-            log(f"graph: gremlin at {url} ({time.time() - t0:.1f}s)")
-            return st
-        except Exception as e:  # pragma: no cover - needs a server
-            log(f"graph: gremlin unavailable ({type(e).__name__}: {e}); using sqlite")
+            self._get(quiet=True)
+        except RuntimeError:
+            pass
+
+    @property
+    def name(self):
+        return "janusgraph" if self._st else "janusgraph (unreachable)"
+
+    def _get(self, quiet: bool = False) -> GremlinGraphStore:
+        with self._lock:
+            if self._st is not None:
+                return self._st
+            if time.time() < self._next_try:
+                raise RuntimeError(f"JanusGraph at {self.url} is not reachable ({self.error}); start scripts/janusgraph/start")
+            try:
+                st = GremlinGraphStore(self.url, self.settings.get("graph.traversal_source", "g"), self.settings.get("engines.kg.timeout_s", 5.0))
+                try:
+                    st.g.V().limit(1).count().next()
+                except Exception as e:
+                    st.close()
+                    raise RuntimeError(f"server not answering ({type(e).__name__}: {e})")
+                if self.settings.get("graph.ensure_schema", True):
+                    try:
+                        st.ensure_schema()
+                    except Exception as e:  # pragma: no cover
+                        self.log(f"graph: schema script not applied ({e})")
+                self._st, self.error = st, None
+                self.log(f"graph: JanusGraph connected at {self.url}")
+                return st
+            except Exception as e:
+                self.error = f"{type(e).__name__}: {e}"
+                self._next_try = time.time() + self.retry_s
+                if not quiet:
+                    self.log(f"graph: JanusGraph unavailable at {self.url} ({self.error})")
+                raise RuntimeError(f"JanusGraph at {self.url} is not reachable ({self.error}); start scripts/janusgraph/start")
+
+    def ping(self):
+        try:
+            ok = self._get().ping()
+            if not ok:
+                self._st = None
+            return ok
+        except Exception:
+            return False
+
+    def stats(self):
+        try:
+            return self._get().stats()
+        except Exception:
+            return {"backend": self.name, "url": self.url, "error": self.error, "vertices": 0, "edges": 0, "by_label": {}}
+
+    def schema_counts(self):
+        try:
+            return self._get().schema_counts()
+        except Exception:
+            return {"vertices": {}, "edges": {}, "is_a": {}}
+
+    def close(self):
+        if self._st:
+            self._st.close()
+
+    def __getattr__(self, item):
+        attr = getattr(GremlinGraphStore, item, None)
+        if attr is None:
+            raise AttributeError(item)
+
+        def call(*a, **k):
+            st = self._get()
+            try:
+                return getattr(st, item)(*a, **k)
+            except Exception:
+                if not st.ping():          # connection lost: reconnect on the next call
+                    self._st = None
+                raise
+        return call
+
+
+def open_store(settings, log=print) -> "GraphStore":
+    backend = str(settings.get("graph.backend", "janusgraph")).lower()
+    if backend in ("janusgraph", "gremlin"):
+        proxy = JanusGraphProxy(settings, log)
+        if proxy._st is None and settings.get("graph.fallback_sqlite", False):
+            log(f"graph: JanusGraph unavailable ({proxy.error}); using sqlite (graph.fallback_sqlite)")
+            return SqliteGraphStore(settings.var("db", "kg.sqlite"))
+        return proxy
     return SqliteGraphStore(settings.var("db", "kg.sqlite"))
