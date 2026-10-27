@@ -1,0 +1,95 @@
+# substation_retrieval settings. Environment variables override the keys noted in comments.
+# Relative paths resolve against the repo root.
+
+paths:
+  data_dir: ../../data/all_data/css/pdf          # SR_DATA_DIR   source drawings (PDF/DXF/DWG)
+  v1_parsed_dir: ../../data/all_data/css/pdf/css_parsed   # SR_V1_DIR  v1 extraction (importer input)
+  var_dir: ./var                                 # SR_VAR_DIR    workspace: db, artifacts, uploads, cache
+  watch_dir: ./var/inbox                         # SR_WATCH_DIR  drop files here when the watcher is on
+
+server:
+  host: 127.0.0.1
+  port: 8077
+  workers_in_process: 1        # background ingest workers started with the API
+  watch_folder: false          # poll paths.watch_dir for new files
+  watch_interval_s: 10
+
+llm:
+  provider: openai             # SR_LLM_PROVIDER  openai | anthropic | none
+  model: gpt-6-astra           # SR_LLM_MODEL
+  api_style: responses         # SR_LLM_API_STYLE responses | chat
+  base_url: null               # OPENAI_BASE_URL
+  anthropic_model: claude-sonnet-4-5
+  timeout_s: 240
+  max_output_tokens: 12000
+  prompt_version: x2.1         # bump to invalidate the extraction cache
+  render_dpi_pass1: 110
+  render_dpi_pass2: 200
+
+engines:
+  retrieval_mode: auto         # SR_RETRIEVAL_MODE kg | rag | auto | both
+  kg:
+    enabled: true              # CSS_KG_ENABLED
+    timeout_s: 5.0
+    min_typed_vertices: 3      # fewer query vertices than this -> fall back to RAG (auto mode)
+    min_candidates: 3          # fewer candidates scoring >= min_score -> fall back (auto mode)
+    min_score: 0.40
+    weights: { nodes: 0.30, edges: 0.25, geom: 0.30, facets: 0.15 }
+  rag:
+    enabled: true              # CSS_RAG_ENABLED
+    shortlist: 40
+    weights: { text: 0.25, features: 0.35, raster: 0.20, embedding: 0.20 }
+    embedding: none            # none | openai   (openai uses the LLM key; model below)
+    embedding_model: text-embedding-3-small
+
+graph:
+  backend: sqlite              # SR_GRAPH_BACKEND sqlite | gremlin
+  gremlin_url: ws://localhost:8182/gremlin   # SR_GREMLIN_URL
+  traversal_source: g
+
+scoring:
+  top_k: 10
+  verdict: { reuse: 0.80, adapt: 0.60 }
+  hard_facets:                 # multiplier when the query states the facet and the design contradicts it
+    installation: 0.5
+    arrangement: 0.8
+    voltage_kv: 0.7
+  als_weights:                 # Aligned Layout Score components (presence rule drops absent ones)
+    footprint: 3.0
+    equipment: 3.0
+    structure: 3.0             # columns + beams
+    cutouts: 2.0
+    doors: 2.0
+    height: 2.0
+    trench: 1.0
+    louvres: 0.5
+    site: 1.0
+  match_sigma_mm: 600          # positional tolerance in the per-class set match
+  area_log_tol: 0.3
+  iou_dilate_mm: 150
+  align_refine_deg: 10
+
+rules:                         # from Equip_DimensionRules.xlsx (catalogue.json carries the full table)
+  css_min_height_mm: 4200
+  tray_below_beam_mm: 450
+  transformer_door_mm: 2750
+  catalogue_tol: { footprint: 0.05, height: 0.08, weight: 0.08 }
+  plot_clearance_mm:
+    compound_wall: 1500
+    dp_road: 4500
+    internal_road: 1500
+    nalla: 6000
+    structure: 6000
+    tree: 1500
+    tree_at_door: 4500
+    wayleave_width: 6000
+
+extraction:
+  review_gate: auto            # auto | provisional (provisional docs are indexed but flagged)
+  min_quality_auto: 0.65
+  scale_fit_tol: 0.03
+  scale_min_fits: 2
+  save_debug: true             # masks, crops, overlays under var/artifacts/<doc_id>/
+  mask_classes: [site_boundary, room, equipment, trench, door, rolling_shutter, ventilation, fire_exit,
+                 beam, column, cutout, wayleave, access_path, cable_tray, platform, staircase,
+                 nalla, dp_road, internal_road, tree, compound_wall, structure]

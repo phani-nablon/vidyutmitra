@@ -1,0 +1,33 @@
+# runtime workspace (indexes, graph db, jobs, masks, crops, debug overlays, LLM cache)
+var/
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+
+# secrets
+.env
+.env.*
+!.env.example
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+build/
+dist/
+.uv/
+
+# editors / os
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# drawings never go into git
+*.pdf
+*.dwg
+*.dxf
+!tests/fixtures/**

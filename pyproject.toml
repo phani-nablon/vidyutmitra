@@ -1,0 +1,51 @@
+[project]
+name = "substation-retrieval"
+version = "0.1.0"
+description = "CSS design retrieval: drawing extraction v2, ontology knowledge-graph matching and RAG fallback for AEML consumer substations"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Proprietary - Nablon AI" }
+authors = [{ name = "Nablon AI" }]
+dependencies = [
+  "fastapi>=0.110",
+  "uvicorn>=0.29",
+  "python-multipart>=0.0.9",
+  "pydantic>=2.6",
+  "pyyaml>=6.0",
+  "numpy>=1.26",
+  "scipy>=1.11",
+  "shapely>=2.0",
+  "pymupdf>=1.24",
+  "opencv-python-headless>=4.9",
+  "pillow>=10.0",
+  "openai>=1.40",
+  "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+gremlin = ["gremlinpython>=3.7"]
+cad = ["ezdxf>=1.3"]
+anthropic = ["anthropic>=0.40"]
+dev = ["pytest>=8.0"]
+all = ["gremlinpython>=3.7", "ezdxf>=1.3", "anthropic>=0.40", "pytest>=8.0"]
+
+[project.scripts]
+sr = "substation_retrieval.cli:main"
+
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/substation_retrieval"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/substation_retrieval/core/catalog.json" = "substation_retrieval/core/catalog.json"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+pythonpath = ["src"]
+
+[tool.uv]
+dev-dependencies = ["pytest>=8.0"]

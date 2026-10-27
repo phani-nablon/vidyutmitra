@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CSS Design Retrieval</title>
+<link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="logo">⌁</span> CSS Design Retrieval</div>
+  <nav id="tabs">
+    <button data-tab="chat" class="active">Chat</button>
+    <button data-tab="library">Library &amp; ingest</button>
+    <button data-tab="ontology">Ontology</button>
+    <button data-tab="site">Site graph</button>
+    <button data-tab="admin">Admin</button>
+  </nav>
+  <div id="status" class="status"></div>
+</header>
+
+<main>
+  <!-- CHAT -->
+  <section id="tab-chat" class="tab active">
+    <div class="chat-wrap">
+      <div id="messages" class="messages">
+        <div class="msg bot intro">
+          Describe the new site and I will rank the closest historic CSS designs.
+          <div class="examples">
+            <button class="ex">Indoor CSS on ground floor of a residential building, 2 x 1500 kVA dry DT, 1 RMU, 4 LTP, room 11 x 8 m, clear height 4.5 m, rolling shutter, trench to DP road</button>
+            <button class="ex">Open to sky substation, 1 x 990 kVA oil transformer, RMU, LTP, nalla 4 m away</button>
+            <button class="ex">Metering CSS with RMU and CTPT on stilt floor, 2 doors</button>
+          </div>
+        </div>
+      </div>
+      <div class="composer">
+        <div id="attach-chip" class="chip hidden"></div>
+        <textarea id="input" rows="2" placeholder="Requirement or follow-up question…  (Enter to send, Shift+Enter for a new line)"></textarea>
+        <div class="composer-row">
+          <label class="btn ghost" title="Upload the builder's site plan (red = proposed CSS area)">Attach site plan
+            <input id="siteplan-file" type="file" accept=".png,.jpg,.jpeg,.pdf" hidden></label>
+          <input id="sp-length" class="small" type="number" placeholder="long side mm (scale)">
+          <select id="mode">
+            <option value="">mode: settings</option><option value="auto">auto (KG → RAG)</option>
+            <option value="kg">KG only</option><option value="rag">RAG only</option><option value="both">both</option>
+          </select>
+          <span class="spacer"></span>
+          <button id="send" class="btn primary">Send</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- LIBRARY -->
+  <section id="tab-library" class="tab">
+    <div class="grid2">
+      <div class="card">
+        <h3>Add drawings</h3>
+        <p class="muted">PDF now; DXF / DWG adapters are first cut. Each file becomes a job: extract → review gate → graph + RAG upsert → new index version.</p>
+        <input id="ingest-files" type="file" multiple accept=".pdf,.dxf,.dwg">
+        <div class="row">
+          <label><input id="opt-v1" type="checkbox" checked> reuse v1 extraction when available</label>
+          <label><input id="opt-force" type="checkbox"> re-ingest duplicates</label>
+          <select id="opt-gate"><option value="">gate: settings</option><option value="auto">auto</option><option value="provisional">provisional</option><option value="hold">hold for review</option></select>
+        </div>
+        <button id="ingest-btn" class="btn primary">Upload &amp; ingest</button>
+        <div class="row">
+          <button id="import-v1" class="btn">Import v1 corpus</button>
+          <button id="rebuild" class="btn">Rebuild index (no LLM)</button>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Jobs</h3>
+        <div id="jobs" class="table-wrap"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="row"><h3>Documents</h3><input id="doc-filter" placeholder="filter…"><span class="spacer"></span><span id="doc-count" class="muted"></span></div>
+      <div id="docs" class="table-wrap"></div>
+    </div>
+  </section>
+
+  <!-- ONTOLOGY -->
+  <section id="tab-ontology" class="tab">
+    <div class="grid2">
+      <div class="card"><h3>Class tree <span class="muted">(instances in the graph)</span></h3><div id="onto-tree"></div></div>
+      <div class="card"><h3>Ontology graph</h3><svg id="onto-svg" class="graph"></svg>
+        <div id="onto-meta" class="muted small"></div></div>
+    </div>
+  </section>
+
+  <!-- SITE GRAPH -->
+  <section id="tab-site" class="tab">
+    <div class="card row">
+      <select id="site-doc"></select>
+      <label><input type="checkbox" id="hide-concepts"> hide ontology classes</label>
+      <label><input type="checkbox" id="hide-layouts" checked> hide layouts</label>
+      <span class="spacer"></span><span id="site-meta" class="muted"></span>
+    </div>
+    <div class="grid2">
+      <div class="card"><h3>Knowledge graph of this site</h3><svg id="site-svg" class="graph tall"></svg><div id="node-info" class="small"></div></div>
+      <div class="card"><h3>Extracted geometry</h3><div id="site-geom"></div><h3>Debug artifacts</h3><div id="site-art" class="gallery"></div></div>
+    </div>
+  </section>
+
+  <!-- ADMIN -->
+  <section id="tab-admin" class="tab">
+    <div class="grid2">
+      <div class="card">
+        <h3>Engines</h3>
+        <label class="switch"><input type="checkbox" id="kg-on"> Ontology KG matching</label>
+        <label class="switch"><input type="checkbox" id="rag-on"> RAG matching</label>
+        <div class="row">Retrieval mode
+          <select id="admin-mode"><option>auto</option><option>kg</option><option>rag</option><option>both</option></select>
+          <button id="save-engines" class="btn primary">Apply</button></div>
+        <p class="muted small">auto = KG first, RAG when the graph is down / slow, the query graph has &lt; 3 typed vertices, or &lt; 3 KG candidates score ≥ 0.40. The ontology views stay available either way.</p>
+        <h3>Health</h3><pre id="health"></pre>
+      </div>
+      <div class="card"><h3>Index versions</h3><div id="versions" class="table-wrap"></div><h3>Settings</h3><pre id="settings"></pre></div>
+    </div>
+  </section>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>
