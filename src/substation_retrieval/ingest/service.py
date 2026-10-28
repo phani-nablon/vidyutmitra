@@ -123,10 +123,11 @@ class IngestService:
         return doc
 
     # ------------------------------------------------------------ index ops
-    def index_doc(self, doc: dict, json_path: Path, similar: bool = True) -> None:
-        V, E = build_partition(doc)
-        self.store.upsert_shared(shared_for(V, E), [])
-        self.store.upsert_partition(doc["doc_id"], V, E)
+    def index_doc(self, doc: dict, json_path: Path, similar: bool = True, graph: bool = True) -> None:
+        if graph:
+            V, E = build_partition(doc)
+            self.store.upsert_shared(shared_for(V, E), [])
+            self.store.upsert_partition(doc["doc_id"], V, E)
         self.index.upsert(doc, str(json_path), self._embedder(), self.image_embedder)
         if similar:
             self.refresh_similar([doc["doc_id"]])
@@ -156,7 +157,10 @@ class IngestService:
             for v, osid in sorted(sims, reverse=True)[:top]:
                 E.append({"label": "SIMILAR_TO", "out": s["sid"], "in": osid, "pk": s["doc_id"], "props": {"score": round(v, 3), "by": "mask_raster"}})
         if E:
-            self.store.upsert_shared([], E)
+            try:
+                self.store.upsert_shared([], E)
+            except Exception as e:  # graph down (RAG-only rebuild): similarity edges come with the next graph load
+                log.warning("SIMILAR_TO edges not written: %s", e)
         return len(E)
 
     def import_v1(self, v1_dir: str | Path | None = None, pdf_dir: str | Path | None = None, log_fn=print) -> dict:
@@ -181,9 +185,11 @@ class IngestService:
         v = self.index.publish(f"v1 import ({len(done)} docs)", done)
         return {"imported": len(done), "failed": failed, "similar_edges": n_sim, "version": v}
 
-    def rebuild(self, log_fn=print) -> dict:
-        """Re-index every stored extraction (no LLM calls)."""
-        self.ensure_ontology()
+    def rebuild(self, log_fn=print, graph: bool = True) -> dict:
+        """Re-index every stored extraction (no LLM calls). graph=False refreshes only the RAG index
+        (features, rasters, image embeddings) and works while Neo4j is down."""
+        if graph:
+            self.ensure_ontology()
         root = self.s.var("extractions")
         done = []
         for jp in sorted(root.glob("*/doc.json")):
@@ -194,7 +200,7 @@ class IngestService:
             from ..core.schema import validate_doc
             doc = validate_doc(enrich(doc, self.s.get("rules"), self.s.get("extraction")))
             dump_json(doc, jp)
-            self.index_doc(doc, jp, similar=False)
+            self.index_doc(doc, jp, similar=False, graph=graph)
             done.append(doc["doc_id"])
             log_fn(f"re-indexed {doc['source']['file_name']}")
         n_sim = self.refresh_similar(None)

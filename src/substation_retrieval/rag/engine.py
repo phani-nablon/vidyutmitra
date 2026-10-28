@@ -27,7 +27,9 @@ STOP = set("the a an of and or to in on for with at by from is are be as this th
 # query so free text only adds what the fields do not capture (project names, special notes)
 DOMAIN = set("""css substation substations transformer transformers dt dts dtr rmu rmus ltp ltps lt ht panel panels kva way ways
 room rooms get me need want find show give design designs layout layouts similar like one two three four five six nos no
-indoor outdoor floor ground stilt basement podium first second terrace open sky to x with without""".split())
+indoor outdoor floor ground stilt basement podium first second terrace open sky to x with without show existing inside
+building centralised centralized distributed separate level single area clear height raised platform looking having
+consumer cubicle cubicles metering ctpt pillar pillars feeder distribution dry oil nos m mm sq by about shaped corner""".split())
 
 
 def tokens(s: str) -> list[str]:

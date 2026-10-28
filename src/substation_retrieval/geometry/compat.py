@@ -64,6 +64,18 @@ def check_all(query: dict, q: RoomGeom, r: RoomGeom, pose: Pose, sub: dict, doc:
         elif posed_eq:
             checks.append(_chk("equipment_inside", "pass", f"all {len(posed_eq)} equipment footprints fit inside the new outline"))
 
+    # 1b. size similarity (room L x B vs the requested size / site outline), independent of the pose
+    import math
+    qL, qB = query.get("length_mm"), query.get("width_mm")
+    if not (qL and qB) and q.outline is not None:
+        d = P.dims(q.outline)
+        qL, qB = (d if d else (None, None))
+    if qL and qB and r.outline is not None:
+        rd = P.dims(r.outline)
+        if rd:
+            dev = (abs(math.log(max(qL, qB) / rd[0])) + abs(math.log(min(qL, qB) / rd[1]))) / 2
+            extra["size"] = math.exp(-dev / 0.12)
+
     # 2a. requested equipment counts vs the historic design
     have = sub.get("counts") or {}
     if not have:
@@ -130,6 +142,10 @@ def check_all(query: dict, q: RoomGeom, r: RoomGeom, pose: Pose, sub: dict, doc:
         else:
             checks.append(_chk("height", "pass", f"clear height {hq:.0f} mm meets equipment + tray rule" + (f" ({need:.0f})" if need else "")))
             extra["height"] = 1.0
+        if r.clear_height_mm:
+            import math as _m
+            sim = _m.exp(-abs(_m.log(hq / r.clear_height_mm)) / 0.08)
+            extra["height"] = 0.5 * extra["height"] + 0.5 * sim
         if r.clear_height_mm and hq < r.clear_height_mm - 300:
             checks.append(_chk("height_vs_historic", "warn", f"new site {hq:.0f} mm is lower than the historic {r.clear_height_mm:.0f} mm"))
             extra["height"] = min(extra.get("height", 1.0), 0.7)

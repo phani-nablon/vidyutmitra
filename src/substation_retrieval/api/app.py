@@ -50,7 +50,7 @@ def _watch_loop(sv, stop: threading.Event):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     import asyncio
-    # gremlinpython runs its own event loop: build the services (and the JanusGraph connection) off the server loop
+    # build the services (and the Neo4j connection) off the server loop
     sv = await asyncio.to_thread(get_services)
     sv.ingest.start_workers(int(sv.settings.get("server.workers_in_process", 1)))
     app.state.chat = ChatAgent(sv)

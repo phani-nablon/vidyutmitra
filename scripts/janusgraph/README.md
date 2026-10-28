@@ -1,24 +1,21 @@
 # JanusGraph (default knowledge-graph store, no docker)
 
-The app talks to JanusGraph over Gremlin (`ws://127.0.0.1:8182/gremlin`, `gremlinpython` bytecode).
-Storage is embedded BerkeleyDB-JE with a Lucene index, kept under `var/janusgraph/data` (gitignored).
-On first connect the app creates the composite indexes it needs (`schema.groovy`: vid, pk, cls, edge pk).
+Managed by the `sr` command; no launcher scripts, no HADOOP_HOME, no winutils:
 
-## Windows
-1. Java 17: `winget install Microsoft.OpenJDK.17` (open a new terminal afterwards).
-2. `powershell -ExecutionPolicy Bypass -File scripts\janusgraph\setup.ps1`
-   downloads JanusGraph 1.1.0 (~400 MB, once) and `winutils.exe`, writes the config.
-3. `powershell -ExecutionPolicy Bypass -File scripts\janusgraph\start.ps1` (leave the window open).
-4. In another terminal: `sr janus-check`, then `sr import-v1` (or `sr rebuild`) to load the graph.
+```
+sr janus-start     # first time: checks Java, downloads JanusGraph 1.1.0 (~400 MB) into var/janusgraph, writes config;
+                   # then starts it in the background and waits until ws://127.0.0.1:8182/gremlin answers
+sr janus-status    # up / down, Java version, log tail (var/janusgraph/server.log)
+sr janus-stop
+```
 
-## Linux / macOS
-`scripts/janusgraph/setup.sh` then `scripts/janusgraph/start.sh`.
+Any `sr` command that needs the graph (`serve`, `import-v1`, `rebuild`, `search`, ...) starts JanusGraph by itself
+when it is configured on localhost and not running (`graph.autostart: true`).
 
-## GCP
-Point `graph.gremlin_url` (or `SR_GREMLIN_URL`) at a JanusGraph Server whose graph uses Cloud Bigtable
-(`janusgraph-bigtable.properties`) and Elasticsearch for mixed indexes. Nothing in the app changes.
+Java: an installed Java 11+ (JAVA_HOME or PATH) is used; if there is none, `sr janus-start` downloads a portable
+Eclipse Temurin 17 runtime into `var/jre` (~46 MB, no admin rights).
+Storage: embedded BerkeleyDB-JE + Lucene under `var/janusgraph/data`. On connect the app creates the composite
+indexes in `schema.groovy` (vid, pk, cls, edge pk).
 
-## If JanusGraph is down
-The KG engine reports unavailable; `auto` retrieval mode answers with RAG and says so in the trace;
-ingestion jobs fail with a clear message; the ontology view still works. `graph.backend: sqlite` exists only
-for tests and offline work.
+GCP: point `graph.gremlin_url` (or `SR_GREMLIN_URL`) at a JanusGraph Server using Cloud Bigtable
+(`janusgraph-bigtable.properties`) + Elasticsearch; autostart is skipped for non-local URLs.

@@ -18,7 +18,7 @@ REPO_ROOT = PKG_DIR.parent.parent
 DEFAULT_SETTINGS = REPO_ROOT / "config" / "settings.yaml"
 
 SECRET_KEYS = ("OPENAI_API_KEY", "ASTRA_API_KEY", "astra_api_key", "openai_api_key", "ANTHROPIC_API_KEY", "CLAUDE_API_KEY",
-               "claude_api_key", "AZURE_OPENAI_API_KEY")
+               "claude_api_key", "AZURE_OPENAI_API_KEY", "SR_NEO4J_PASSWORD")
 
 # env var -> dotted settings key
 ENV_MAP = {
@@ -35,7 +35,8 @@ ENV_MAP = {
     "CSS_KG_ENABLED": "engines.kg.enabled",
     "CSS_RAG_ENABLED": "engines.rag.enabled",
     "SR_GRAPH_BACKEND": "graph.backend",
-    "SR_GREMLIN_URL": "graph.gremlin_url",
+    "SR_NEO4J_URI": "graph.neo4j_uri",
+    "SR_NEO4J_USER": "graph.neo4j_user",
     "SR_HOST": "server.host",
     "SR_PORT": "server.port",
 }
@@ -139,7 +140,7 @@ class Settings:
         """Settings safe to return over the API (no secrets)."""
         d = copy.deepcopy(self.data)
         d["llm"]["key_present"] = bool(self.secret(*SECRET_KEYS))
-        d["llm"]["astra_key_present"] = bool(self.secret("ASTRA_API_KEY", "OPENAI_API_KEY", "astra_api_key", "openai_api_key"))
+        d["llm"]["llm_key_present"] = bool(self.secret("ASTRA_API_KEY", "OPENAI_API_KEY", "astra_api_key", "openai_api_key"))
         d["dotenv_found"] = bool(self.dotenv)
         return d
 

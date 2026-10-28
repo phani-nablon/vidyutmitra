@@ -51,7 +51,14 @@ def substation_features(sub: dict, doc: dict) -> dict:
         "trench": bool(sub["cable"].get("routes")) or any(f.get("cls") == "trench" for f in (doc.get("site") or {}).get("features", [])),
         "access": any(f.get("cls") in ("access_path", "wayleave") for f in (doc.get("site") or {}).get("features", [])),
         "status": (doc.get("quality") or {}).get("status"),
+        "building": _places().doc_building(doc),
+        "localities": _places().localities(_places().doc_text(doc)),
     }
+
+
+def _places():
+    from ..core import places
+    return places
 
 
 def substation_text(sub: dict, doc: dict) -> str:

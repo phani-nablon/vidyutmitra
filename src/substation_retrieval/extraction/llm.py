@@ -1,7 +1,7 @@
 """LLM client for the extraction passes and chat (vision + strict JSON).
 
 Providers
-  openai     OpenAI-compatible endpoint serving GPT-6 Astra (Responses API, or Chat Completions with
+  openai     OpenAI-compatible endpoint (Responses API, or Chat Completions with
              llm.api_style=chat for gateways). Key: OPENAI_API_KEY / ASTRA_API_KEY.
   anthropic  optional (llm.provider=anthropic). Key: ANTHROPIC_API_KEY.
 Responses are cached on disk by (document sha, prompt version, pass, key) so re-running an

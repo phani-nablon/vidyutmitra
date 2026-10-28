@@ -33,7 +33,7 @@ class Services:
         self.image_embedder = load_image_embedder(self.settings, log.warning)
         self.ingest.image_embedder = self.image_embedder
         self.rag = RAGEngine(self.index, self.settings, embedder, self.image_embedder)
-        self.orchestrator = Orchestrator(self.kg, self.rag, self.settings)
+        self.orchestrator = Orchestrator(self.kg, self.rag, self.settings, self)
         try:
             self.ingest.ensure_ontology()
         except Exception as e:  # graph down: app still starts (RAG + ontology view)

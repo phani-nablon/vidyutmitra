@@ -17,7 +17,8 @@ from .query import describe, present
 
 
 class Orchestrator:
-    def __init__(self, kg_engine, rag_engine, settings):
+    def __init__(self, kg_engine, rag_engine, settings, services=None):
+        self._services = services
         self.kg = kg_engine
         self.rag = rag_engine
         self.settings = settings
@@ -29,8 +30,8 @@ class Orchestrator:
 
     def set_flags(self, retrieval_mode=None, kg_enabled=None, rag_enabled=None) -> dict:
         if retrieval_mode:
-            if retrieval_mode not in ("kg", "rag", "auto", "both"):
-                raise ValueError("retrieval_mode must be kg | rag | auto | both")
+            if retrieval_mode not in ("kg", "rag", "auto", "both", "hybrid"):
+                raise ValueError("retrieval_mode must be hybrid | kg | rag | auto | both")
             self.settings.set("engines.retrieval_mode", retrieval_mode)
         if kg_enabled is not None:
             self.settings.set("engines.kg.enabled", bool(kg_enabled))
@@ -71,6 +72,12 @@ class Orchestrator:
                 raise RuntimeError("RAG engine disabled")
             return self.rag.search(q, k)
 
+        if mode == "hybrid":
+            from .hybrid import hybrid_search
+            from ..services import get_services
+            out = hybrid_search(self._services or get_services(), q, k)
+            out["elapsed_ms"] = round((time.time() - t0) * 1000)
+            return out
         if mode == "kg":
             results, info["kg"] = run_kg()
             engine_used = "kg"
@@ -98,15 +105,18 @@ class Orchestrator:
         else:  # auto
             reason = None
             try:
-                results, info["kg"] = run_kg()
-                engine_used = "kg"
                 kgc = self.settings.get("engines.kg")
+                if not f["kg_enabled"]:
+                    raise KGUnavailable("KG engine disabled")
+                results, info["kg"] = self.kg.search(q, max(k, int(kgc["min_candidates"])))
+                engine_used = "kg"
                 if info["kg"]["typed_vertices"] < kgc["min_typed_vertices"] and not present(q)["footprint"]:
                     reason = f"query graph has {info['kg']['typed_vertices']} typed vertices (< {kgc['min_typed_vertices']})"
                 elif sum(1 for r in results if r.score >= kgc["min_score"]) < kgc["min_candidates"]:
                     reason = f"fewer than {kgc['min_candidates']} KG candidates scored >= {kgc['min_score']}"
             except Exception as e:
                 reason = str(e)
+            results = results[:k]
             if reason:
                 trace.append(f"fallback to RAG: {reason}")
                 try:

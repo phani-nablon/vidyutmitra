@@ -9,7 +9,7 @@ Vertex labels  document, layout, substation, equipment, opening, structure, rout
 Edge labels    HAS_LAYOUT, HAS_SUBSTATION, HAS_FEATURE, SECTION_OF, DRAWN_IN, CONTAINS, ON_WALL, UNDER,
                BELOW_BEAM, CLEARANCE, FACES, CONNECTS, DISTANCE_TO, IS_A, SUBCLASS_OF,
                MATCHES_CATALOGUE, HAS_FACET, SIMILAR_TO
-Polygons are stored as JSON (`polygon_mm`) and WKT (`geo_wkt`, mapped to a JanusGraph geoshape).
+Polygons are stored as JSON (`polygon_mm`) and WKT (`geo_wkt`).
 """
 from __future__ import annotations
 
@@ -65,7 +65,21 @@ def doc_facets(doc: dict) -> dict[str, Any]:
     if md.get("voltage_kv"):
         f["voltage_kv"] = int(md["voltage_kv"])
     f["multiple_substations"] = bool(md.get("multiple_substations"))
+    from ..core.places import doc_building, doc_text, localities
+    b = doc_building(doc)
+    if b:
+        f["building"] = b
+    feats = {x.get("cls") for x in (doc.get("site") or {}).get("features", [])}
+    if feats & {"access_path", "wayleave"}:
+        f["site_access"] = True
+    if "trench" in feats or any(r for s in doc.get("substations", []) for r in s["cable"].get("routes", [])):
+        f["site_trench"] = True
     return f
+
+
+def doc_localities(doc: dict) -> list[str]:
+    from ..core.places import doc_text, localities
+    return localities(doc_text(doc))
 
 
 def sub_facets(sub: dict, doc: dict) -> dict[str, list]:
@@ -102,6 +116,8 @@ def build_partition(doc: dict) -> tuple[list[dict], list[dict]]:
           arrangement=md.get("arrangement"), floor=md.get("floor"), substation_count=md.get("substation_count"))
     for k, val in doc_facets(doc).items():
         e("HAS_FACET", d, facet_vid(k, val), key=k)
+    for loc in doc_localities(doc):
+        e("HAS_FACET", d, facet_vid("locality", loc), key="locality")
     for L in doc.get("layouts", []):
         lv = v(f"{pk}:L:{L['id']}", "layout", layout_id=L["id"], type=L.get("type"), title=L.get("title"), page=L.get("page"),
                mm_per_px=L.get("mm_per_px"))

@@ -154,13 +154,61 @@ class ImageEmbedder:
         return self.embed_many([_centre(p) for p in _poses(R)])
 
 
+class LazyImageEmbedder:
+    """Loads DINOv2 (torch + transformers, several seconds) on the first embed call, not at start-up,
+    so commands that never embed (neo4j-*, health, jobs, ingest of PDFs) stay fast."""
+
+    def __init__(self, settings, log=print):
+        self.settings, self.log = settings, log
+        self._e = None
+        self._failed = False
+        self.name = settings.get("engines.rag.image_model", "facebook/dinov2-small")
+
+    def _get(self):
+        if self._e is None and not self._failed:
+            self._e = _load_now(self.settings, self.log)
+            self._failed = self._e is None
+        if self._e is None:
+            raise RuntimeError("image embedder unavailable")
+        return self._e
+
+    def embed(self, R):
+        return self._get().embed(R)
+
+    def embed_poses(self, R):
+        return self._get().embed_poses(R)
+
+
 def load_image_embedder(settings, log=print):
-    """Returns an ImageEmbedder when engines.rag.image_embedder == 'dinov2' and torch/transformers are installed."""
-    if str(settings.get("engines.rag.image_embedder", "none")).lower() != "dinov2":
+    """A lazy DINOv2 embedder when it is configured and its weights are present, else None (cheap check only)."""
+    mode = str(settings.get("engines.rag.image_embedder", "auto")).lower()
+    if mode in ("none", "off", "false"):
         return None
     model_id = settings.get("engines.rag.image_model", "facebook/dinov2-small")
+    local = settings.var("models", model_id.split("/")[-1], mkdir=False)
+    if mode == "auto" and not (local / "config.json").exists():
+        return None
+    return LazyImageEmbedder(settings, log)
+
+
+def _load_now(settings, log=print):
+    """Returns an ImageEmbedder when engines.rag.image_embedder == 'dinov2' and torch/transformers are installed."""
+    mode = str(settings.get("engines.rag.image_embedder", "auto")).lower()
+    if mode in ("none", "off", "false"):
+        return None
+    model_id = settings.get("engines.rag.image_model", "facebook/dinov2-small")
+    local = settings.var("models", model_id.split("/")[-1], mkdir=False)
+    # auto = only when `sr setup-embedder` has saved the weights locally (no hub download, no torch import otherwise)
+    if mode == "auto" and not (local / "config.json").exists():
+        return None
     try:
-        return ImageEmbedder(model_id, settings.var("models", model_id.split("/")[-1], mkdir=False))
-    except Exception as e:
-        log(f"image embedder unavailable ({type(e).__name__}: {e}); install requirements-ml.txt and run `sr setup-embedder`")
+        import importlib.util
+        if importlib.util.find_spec("torch") is None or importlib.util.find_spec("transformers") is None:
+            log("image embedder off: torch / transformers not installed (requirements-ml.txt)")
+            return None
+        return ImageEmbedder(model_id, local)
+    except BaseException as e:  # a broken ML install must never stop the app
+        if isinstance(e, KeyboardInterrupt):
+            raise
+        log(f"image embedder unavailable ({type(e).__name__}: {e}); see README section 6")
         return None

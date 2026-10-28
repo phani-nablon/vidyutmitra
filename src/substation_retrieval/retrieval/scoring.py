@@ -106,6 +106,10 @@ def feature_score(q: dict, f: dict) -> tuple[float | None, dict[str, float]]:
     for k in ("access", "trench"):
         if (q.get("site") or {}).get(k):
             parts[f"site_{k}"] = 1.0 if f.get(k) else 0.0
+    if q.get("building"):
+        parts["building"] = 1.0 if f.get("building") == q["building"] else 0.0
+    if q.get("locality"):
+        parts["locality"] = 1.0 if q["locality"] in (f.get("localities") or []) else 0.0
     if not parts:
         return None, parts
     # equipment counts and ratings decide reuse far more than generic facets

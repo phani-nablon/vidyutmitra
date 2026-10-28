@@ -16,7 +16,7 @@ server:
 
 llm:
   provider: openai             # SR_LLM_PROVIDER  openai | anthropic | none
-  model: gpt-6-astra           # SR_LLM_MODEL
+  model: gpt-6-astra           # SR_LLM_MODEL (model id)
   api_style: responses         # SR_LLM_API_STYLE responses | chat
   base_url: null               # OPENAI_BASE_URL
   anthropic_model: claude-sonnet-4-5
@@ -40,17 +40,21 @@ engines:
     enabled: true              # CSS_RAG_ENABLED
     shortlist: 40
     weights: { text: 0.25, features: 0.35, raster: 0.20, embedding: 0.20, image_embedding: 0.15 }
-    image_embedder: dinov2     # dinov2 | none   (needs requirements-ml.txt; inactive if torch is missing)
+    image_embedder: auto       # auto (on once `sr setup-embedder` saved the model) | dinov2 | none
     image_model: facebook/dinov2-small   # ViT-S/14, 22M params; saved to var/models/ by `sr setup-embedder`
     embedding: none            # none | openai   (openai uses the LLM key; model below)
     embedding_model: text-embedding-3-small
 
 graph:
-  backend: janusgraph          # SR_GRAPH_BACKEND janusgraph | sqlite (sqlite = tests / offline only)
-  gremlin_url: ws://localhost:8182/gremlin   # SR_GREMLIN_URL
-  traversal_source: g
-  ensure_schema: true          # create vid / pk composite indexes on start-up
-  fallback_sqlite: false       # if JanusGraph is down: false = KG engine unavailable (auto mode uses RAG)
+  backend: neo4j               # SR_GRAPH_BACKEND neo4j | sqlite (sqlite = tests / offline only)
+  neo4j_uri: bolt://localhost:7687   # SR_NEO4J_URI (neo4j+s://... for Aura)
+  neo4j_user: neo4j            # SR_NEO4J_USER
+  neo4j_password: substation-local   # SR_NEO4J_PASSWORD; only guards the local server (bound to 127.0.0.1), change for shared servers
+  neo4j_database: neo4j
+  ensure_schema: true          # create the vid-unique constraint and the pk index on start-up
+  fallback_sqlite: false       # if Neo4j is down: false = KG engine unavailable (auto mode uses RAG)
+  autostart: true              # local URI + not running -> `sr` starts it (downloads it the first time)
+  autostart_wait_s: 180
 
 scoring:
   top_k: 10
@@ -61,6 +65,7 @@ scoring:
     voltage_kv: 0.7
   als_weights:                 # Aligned Layout Score components (presence rule drops absent ones)
     footprint: 3.0
+    size: 3.0                  # room L x B vs requested size / site outline
     equipment: 3.0
     structure: 3.0             # columns + beams
     cutouts: 2.0

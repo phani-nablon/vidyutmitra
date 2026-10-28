@@ -20,7 +20,7 @@ dependencies = [
   "pillow>=10.0",
   "openai>=1.40",
   "httpx>=0.27",
-  "gremlinpython>=3.7",
+  "neo4j>=5.20,<6",
 ]
 
 [project.optional-dependencies]

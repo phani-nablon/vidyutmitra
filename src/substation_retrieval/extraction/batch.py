@@ -40,7 +40,7 @@ def run(services, pdf_dir: Path, workers: int = 4, limit: int | None = None, ind
     if limit:
         files = files[:limit]
     if not services.llm.available:
-        raise RuntimeError("No Astra key found (ASTRA_API_KEY / OPENAI_API_KEY in .env); refusing to run text-only extraction")
+        raise RuntimeError("No LLM key found (OPENAI_API_KEY / ASTRA_API_KEY in .env); refusing to run text-only extraction")
     ex = services.ingest.extractor
     v1_dir = s.path("paths.v1_parsed_dir")
     report = s.var("reports", f"extract_v2_{time.strftime('%Y%m%d_%H%M%S')}.csv")

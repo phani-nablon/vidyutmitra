@@ -91,9 +91,7 @@ def query_graph(q: dict, qg: RoomGeom, rules: dict) -> dict:
         n += 1
         V.append(QV(f"C{n}", label, cls, {"bottom_mm": q.get("beam_bottom_mm")} if cls == "beam" else
                     ({"width_mm": q.get("door_width_mm")} if cls == "door" else {})))
-    if (q.get("site") or {}).get("trench") and "trench" not in {v.cls for v in V}:
-        n += 1
-        V.append(QV(f"C{n}", "route", "trench"))
+    # a site-level trench / access (to the road) is a facet (site_trench / site_access), not an in-room route vertex
     norms = rules["plot_clearance_mm"]
     for f in (q.get("site_context") or {}).get("features") or []:
         n += 1

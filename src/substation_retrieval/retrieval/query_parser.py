@@ -111,7 +111,7 @@ def parse(text):
         q["installation"] = "open_to_sky"
     elif re.search(r"semi[\s\-]*open|\bshed\b|patra", t):
         q["installation"] = "semi_open"
-    elif re.search(r"indoor|inside|part\s+of\s+(the\s+)?building|\broom\b|basement|stilt|podium|floor\b|within\s+building", t):
+    elif re.search(r"indoor|inside|part\s+of\s+(the\s+)?building|basement|stilt|podium|within\s+building", t):
         q["installation"] = "indoor"
     if re.search(r"distributed|split\s+(across|over|between)|separate\s+rooms|different\s+floors|g\s*\+\s*[12]", t):
         q["arrangement"] = "distributed"
@@ -161,7 +161,8 @@ def parse(text):
     elif re.search(r"multiple\s+(sub\s*-?\s*stations?|css)", t):
         q["multiple_substations"] = True
 
-    # ---- geometry
+    # ---- geometry  ("24x7 access" is an access phrase, not a room size)
+    t = re.sub(r"\b24\s*[x×*]\s*7\b", " round-the-clock ", t)
     m = re.search(r"(\d+(?:\.\d+)?)\s*(mm|m)?\s*(?:x|×|\*|by)\s*(\d+(?:\.\d+)?)\s*(mm|m)?(?!\s*k\s*va)(?!\d)", t)
     if m:
         a, b = _mm(m.group(1), m.group(2) or m.group(4)), _mm(m.group(3), m.group(4) or m.group(2))
@@ -203,8 +204,17 @@ def parse(text):
         site["access"] = True
     if re.search(r"trench|hdpe|cable\s+route|cable\s+tray", t):
         site["trench"] = True
+    if re.search(r"round-the-clock|24\s*[x×]\s*7", t):
+        site["access"] = True
     if site:
         q["site"] = site
+    from ..core.places import building_type, localities
+    b = building_type(t)
+    if b:
+        q["building"] = b
+    loc = localities(t)
+    if loc:
+        q["locality"] = loc[0]
 
     # ---- equipment
     items = parse_equipment(text)

@@ -117,6 +117,12 @@ def facets(q: dict) -> dict:
         out["platform"] = bool(q["platform"])
     if q.get("shape") and q.get("site_polygon_mm") is None:
         out["shape"] = q["shape"]
+    for k in ("building", "locality"):
+        if q.get(k):
+            out[k] = q[k]
+    for k in ("access", "trench"):
+        if (q.get("site") or {}).get(k):
+            out[f"site_{k}"] = True
     return out
 
 
@@ -157,6 +163,12 @@ def describe(q: dict) -> list[str]:
         out.append(f"{k.replace('_', ' ')}" + ("" if v is True else f": {v}"))
     for k, v in (q.get("site_distances") or {}).items():
         out.append(f"{k.replace('_', ' ')} at {v / 1000:.1f} m")
+    for k in ("building", "locality"):
+        if q.get(k):
+            out.append(f"{k}: {q[k]}")
+    for k, v in (q.get("site") or {}).items():
+        if v is True:
+            out.append(f"site {k}")
     if (q.get("site_context") or {}).get("features"):
         out.append(f'{len(q["site_context"]["features"])} site feature(s) from plan')
     return out
