@@ -1,0 +1,325 @@
+{
+ "trench": {
+  "drawings_with_legend": 32,
+  "colours": [
+   {
+    "rgb": [
+     0,
+     0,
+     255
+    ],
+    "docs": 24,
+    "share": 0.75
+   },
+   {
+    "rgb": [
+     0,
+     255,
+     0
+    ],
+    "docs": 14,
+    "share": 0.44
+   },
+   {
+    "rgb": [
+     255,
+     255,
+     0
+    ],
+    "docs": 12,
+    "share": 0.38
+   },
+   {
+    "rgb": [
+     242,
+     113,
+     114
+    ],
+    "docs": 6,
+    "share": 0.19
+   },
+   {
+    "rgb": [
+     0,
+     255,
+     255
+    ],
+    "docs": 6,
+    "share": 0.19
+   },
+   {
+    "rgb": [
+     205,
+     105,
+     40
+    ],
+    "docs": 4,
+    "share": 0.12
+   },
+   {
+    "rgb": [
+     255,
+     0,
+     255
+    ],
+    "docs": 2,
+    "share": 0.06
+   },
+   {
+    "rgb": [
+     255,
+     0,
+     0
+    ],
+    "docs": 2,
+    "share": 0.06
+   },
+   {
+    "rgb": [
+     165,
+     124,
+     82
+    ],
+    "docs": 2,
+    "share": 0.06
+   },
+   {
+    "rgb": [
+     165,
+     82,
+     0
+    ],
+    "docs": 2,
+    "share": 0.06
+   },
+   {
+    "rgb": [
+     38,
+     0,
+     0
+    ],
+    "docs": 2,
+    "share": 0.06
+   },
+   {
+    "rgb": [
+     255,
+     127,
+     127
+    ],
+    "docs": 2,
+    "share": 0.06
+   },
+   {
+    "rgb": [
+     185,
+     91,
+     91
+    ],
+    "docs": 2,
+    "share": 0.06
+   },
+   {
+    "rgb": [
+     221,
+     110,
+     110
+    ],
+    "docs": 2,
+    "share": 0.06
+   },
+   {
+    "rgb": [
+     38,
+     23,
+     19
+    ],
+    "docs": 2,
+    "share": 0.06
+   },
+   {
+    "rgb": [
+     255,
+     127,
+     0
+    ],
+    "docs": 2,
+    "share": 0.06
+   },
+   {
+    "rgb": [
+     113,
+     86,
+     0
+    ],
+    "docs": 2,
+    "share": 0.06
+   }
+  ]
+ },
+ "substation_boundary": {
+  "drawings_with_legend": 14,
+  "colours": [
+   {
+    "rgb": [
+     255,
+     0,
+     0
+    ],
+    "docs": 8,
+    "share": 0.57
+   },
+   {
+    "rgb": [
+     255,
+     255,
+     0
+    ],
+    "docs": 4,
+    "share": 0.29
+   },
+   {
+    "rgb": [
+     0,
+     0,
+     255
+    ],
+    "docs": 4,
+    "share": 0.29
+   },
+   {
+    "rgb": [
+     255,
+     127,
+     0
+    ],
+    "docs": 2,
+    "share": 0.14
+   }
+  ]
+ },
+ "access_path": {
+  "drawings_with_legend": 12,
+  "colours": [
+   {
+    "rgb": [
+     255,
+     255,
+     0
+    ],
+    "docs": 10,
+    "share": 0.83
+   },
+   {
+    "rgb": [
+     242,
+     113,
+     114
+    ],
+    "docs": 2,
+    "share": 0.17
+   },
+   {
+    "rgb": [
+     255,
+     191,
+     127
+    ],
+    "docs": 2,
+    "share": 0.17
+   }
+  ]
+ },
+ "cutout": {
+  "drawings_with_legend": 12,
+  "colours": [
+   {
+    "rgb": [
+     255,
+     0,
+     255
+    ],
+    "docs": 8,
+    "share": 0.67
+   },
+   {
+    "rgb": [
+     0,
+     0,
+     255
+    ],
+    "docs": 4,
+    "share": 0.33
+   }
+  ]
+ },
+ "beam": {
+  "drawings_with_legend": 6,
+  "colours": [
+   {
+    "rgb": [
+     0,
+     255,
+     0
+    ],
+    "docs": 4,
+    "share": 0.67
+   },
+   {
+    "rgb": [
+     0,
+     0,
+     255
+    ],
+    "docs": 2,
+    "share": 0.33
+   },
+   {
+    "rgb": [
+     255,
+     0,
+     255
+    ],
+    "docs": 2,
+    "share": 0.33
+   }
+  ]
+ },
+ "ms_plate": {
+  "drawings_with_legend": 6,
+  "colours": [
+   {
+    "rgb": [
+     0,
+     255,
+     255
+    ],
+    "docs": 4,
+    "share": 0.67
+   },
+   {
+    "rgb": [
+     165,
+     124,
+     0
+    ],
+    "docs": 2,
+    "share": 0.33
+   }
+  ]
+ },
+ "earthing": {
+  "drawings_with_legend": 4,
+  "colours": [
+   {
+    "rgb": [
+     0,
+     255,
+     0
+    ],
+    "docs": 4,
+    "share": 1.0
+   }
+  ]
+ }
+}

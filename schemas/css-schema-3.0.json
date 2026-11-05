@@ -1,0 +1,2667 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://nablon.ai/schemas/vidyutmitra/css-schema-3.0.json",
+  "title": "VidyutMitra substation spec 3.0 (CSS, extensible to DSS)",
+  "description": "One document per substation design or query. The same shape is used for (a) reviewed historic AEML CSS drawings, (b) queries built from chat and builder plans, and (c) layouts the system generates (M5/M6). Presence rule: every field is optional except identity; a missing field means 'not stated', never 'zero' or 'no'. Units: lengths mm, areas m^2, weights kg, voltage kV, ratings kVA / MVA / kVAr, angles degrees. Frames: room_mm per substation (origin top-left of the room bbox, x right, y down, N = top); site_mm per site plan; page_px for raw masks. Scope: core fields are shared by CSS and DSS; type-only fields sit in `css` or `dss`.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "spec_id",
+    "role",
+    "scope"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "3.0"
+    },
+    "spec_id": {
+      "type": "string",
+      "description": "doc_id for historic designs (sha256 prefix), query id for queries."
+    },
+    "role": {
+      "enum": [
+        "historic",
+        "query",
+        "generated"
+      ],
+      "description": "historic = indexed AEML design; query = requirement; generated = tentative / final plan from M5-M6."
+    },
+    "scope": {
+      "enum": [
+        "CSS",
+        "DSS"
+      ],
+      "description": "Substation family. Selects the `css` or `dss` extension."
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "description": "",
+        "properties": {
+          "file_name": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": ""
+          },
+          "kind": {
+            "enum": [
+              "pdf",
+              "dwg",
+              "dxf",
+              "image",
+              "chat",
+              "json"
+            ],
+            "description": ""
+          },
+          "pages": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 1
+          },
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": ""
+          },
+          "revision": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Drawing revision ('R2', 'ver2')."
+          },
+          "supersedes": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "spec_id of the earlier revision this replaces."
+          },
+          "geometry_wins": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "True for the DWG/DXF when a PDF and DWG describe the same site."
+          }
+        },
+        "required": [
+          "file_name",
+          "kind"
+        ],
+        "additionalProperties": false
+      },
+      "default": [],
+      "description": "Files behind this spec. A PDF and DWG of the same site are one spec with two sources."
+    },
+    "project": {
+      "type": "object",
+      "description": "Project identity from the title block.",
+      "properties": {
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Project / building name."
+        },
+        "developer": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": ""
+        },
+        "drawing_no": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": ""
+        },
+        "drawing_date": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "ISO date (YYYY-MM-DD).",
+          "format": "date"
+        },
+        "aeml_ref": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "AEML application / approval reference."
+        },
+        "address": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": ""
+        },
+        "ward": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "MCGM ward."
+        },
+        "title_block": {
+          "type": "object",
+          "default": {},
+          "description": "Raw title-block key/values."
+        }
+      },
+      "additionalProperties": false
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Facets shared by every substation in the spec. Used by S_facets and the hard filters.",
+      "properties": {
+        "installation": {
+          "enum": [
+            "indoor",
+            "open_to_sky",
+            "semi_open",
+            null
+          ],
+          "description": "Hard filter."
+        },
+        "context": {
+          "enum": [
+            "in_building",
+            "standalone_building",
+            "outdoor_yard",
+            "temporary",
+            null
+          ],
+          "description": "Standalone or part of a building."
+        },
+        "space_class": {
+          "enum": [
+            "rg",
+            "open_plot",
+            "part_of_building",
+            null
+          ],
+          "description": "Where the developer allocated the space (xlsx Sheet2)."
+        },
+        "arrangement": {
+          "enum": [
+            "centralized",
+            "distributed",
+            null
+          ],
+          "description": "One location or spread across floors / blocks."
+        },
+        "substation_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Number of substations in this spec.",
+          "minimum": 1
+        },
+        "voltage_kv": {
+          "enum": [
+            11,
+            22,
+            33,
+            null
+          ],
+          "description": "HT supply voltage, kV."
+        },
+        "location_in_building": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Short free text ('upper basement on 800 mm steel platform')."
+        },
+        "legend": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "description": "",
+            "properties": {
+              "text": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": ""
+              },
+              "semantic": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": ""
+              },
+              "color": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": ""
+              }
+            },
+            "additionalProperties": false
+          },
+          "default": [],
+          "description": "Legend entries, used to map layer colours to classes."
+        }
+      },
+      "additionalProperties": false
+    },
+    "css": {
+      "type": "object",
+      "description": "CSS-only fields.",
+      "properties": {
+        "css_type": {
+          "enum": [
+            "dt_css",
+            "metering_only",
+            "package",
+            "pad_mounted",
+            "customised",
+            "ht_switching",
+            null
+          ],
+          "description": "CSS type. dt_css = indoor DT substation; package / pad_mounted / customised = unitised CSS from the catalogue."
+        },
+        "rg_area_m2": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Recreation-ground area when the CSS sits in RG, m^2.",
+          "minimum": 0
+        },
+        "rg_utilisation_pct": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "CSS footprint as % of RG area. Norm: <= 10%.",
+          "maximum": 100,
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "dss": {
+      "type": "object",
+      "description": "Reserved for DSS (Phase 2). Present only when scope = DSS. Extend here; do not change the core.",
+      "properties": {
+        "bays": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Number of HV bays.",
+          "minimum": 0
+        },
+        "incoming_kv": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "",
+          "minimum": 0
+        },
+        "outgoing_kv": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "",
+          "minimum": 0
+        },
+        "maintenance_space_mm": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Vehicle space in front of the DSS, mm. Norm 6000.",
+          "minimum": 0
+        }
+      }
+    },
+    "requirement": {
+      "type": "object",
+      "description": "Query and generated specs only: what is asked for before placement.",
+      "properties": {
+        "load_kva": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Total sanctioned / connected load, kVA.",
+          "minimum": 0
+        },
+        "equipment": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/requested_item"
+          },
+          "default": [],
+          "description": ""
+        },
+        "door_mode": {
+          "enum": [
+            "manual",
+            "auto",
+            null
+          ],
+          "description": "Manual: draftsman fixes main/emergency doors; auto: tool proposes 3 options."
+        },
+        "options_wanted": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Layout options to return (AEML: 3 for CSS).",
+          "minimum": 1
+        },
+        "notes": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Anything else stated in chat."
+        }
+      },
+      "additionalProperties": false
+    },
+    "layouts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/layout"
+      },
+      "default": [],
+      "description": ""
+    },
+    "substations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/substation"
+      },
+      "default": [],
+      "description": "",
+      "minItems": 0
+    },
+    "site": {
+      "type": "object",
+      "description": "Plot around the substation(s), in the site mm frame.",
+      "properties": {
+        "layout_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": ""
+        },
+        "mm_per_px": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "",
+          "minimum": 0
+        },
+        "plot_polygon_mm": {
+          "$ref": "#/definitions/polygon"
+        },
+        "plot_area_m2": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "",
+          "minimum": 0
+        },
+        "substation_polygons_mm": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/polygon"
+          },
+          "default": {},
+          "description": "Substation id -> footprint in the site frame. Links the room frame to the plot."
+        },
+        "features": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/site_feature"
+          },
+          "default": [],
+          "description": ""
+        },
+        "routes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/route"
+          },
+          "default": [],
+          "description": "Site-level wayleave, trench and earthing routes."
+        },
+        "clearance_checks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/clearance_check"
+          },
+          "default": [],
+          "description": ""
+        }
+      },
+      "additionalProperties": false
+    },
+    "segments": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/segment"
+      },
+      "default": [],
+      "description": ""
+    },
+    "outputs": {
+      "type": "object",
+      "description": "Generated specs only (M5/M6): BoQ, floor loads, convergence.",
+      "properties": {
+        "boq": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "description": "",
+            "properties": {
+              "item": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "oil_dt",
+                  "dry_dt",
+                  "natural_ester_dt",
+                  "twin_dt_pss",
+                  "rmu",
+                  "metering_rmu",
+                  "ctpt",
+                  "ht_icog",
+                  "ht_panel",
+                  "gis",
+                  "vcb",
+                  "lt_panel",
+                  "lt_feeder_pillar",
+                  "lt_icog",
+                  "ltpcc",
+                  "hybrid_lt_panel",
+                  "package_ss",
+                  "pad_mounted_ss",
+                  "customised_ss",
+                  "acdb",
+                  "dcdb",
+                  "battery",
+                  "frtu",
+                  "rtu",
+                  "scada",
+                  "apfc",
+                  "capacitor_fixed",
+                  "mineral_pt",
+                  "ester_pt",
+                  "dry_pt",
+                  "cap_bank_ht",
+                  "e_house",
+                  "other",
+                  "civil",
+                  "cable",
+                  "earthing",
+                  null
+                ],
+                "description": ""
+              },
+              "qty": {
+                "type": "number",
+                "minimum": 0
+              },
+              "unit": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "nos, m, m^2, kg"
+              },
+              "source": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": ""
+              }
+            },
+            "required": [
+              "item",
+              "qty"
+            ],
+            "additionalProperties": false
+          },
+          "default": [],
+          "description": ""
+        },
+        "floor_loads": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "description": "",
+            "properties": {
+              "floor": {
+                "enum": [
+                  "lower_basement",
+                  "basement",
+                  "upper_basement",
+                  "ground",
+                  "stilt",
+                  "podium",
+                  "mezzanine",
+                  "first",
+                  "second",
+                  "third",
+                  "upper",
+                  "terrace",
+                  "open_ground",
+                  null
+                ],
+                "description": ""
+              },
+              "substation_id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": ""
+              },
+              "static_kg": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "description": "",
+                "minimum": 0
+              },
+              "dynamic_kg": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "description": "",
+                "minimum": 0
+              },
+              "kn_per_m2": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "description": "Equivalent distributed load.",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false
+          },
+          "default": [],
+          "description": ""
+        },
+        "converged": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "description": "False when the layout does not fit the space ('ask developer for more space')."
+        },
+        "messages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": ""
+        }
+      },
+      "additionalProperties": false
+    },
+    "quality": {
+      "type": "object",
+      "description": "",
+      "properties": {
+        "status": {
+          "enum": [
+            "auto",
+            "provisional",
+            "reviewed"
+          ],
+          "default": "provisional",
+          "description": "Only `reviewed` historic specs are offered as reuse."
+        },
+        "score": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "",
+          "maximum": 1,
+          "minimum": 0
+        },
+        "issues": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": ""
+        },
+        "coverage": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "default": {},
+          "description": "Which feature groups the spec covers (layouts, footprint, scale, equipment, positions, height, section, openings, site, metadata)."
+        },
+        "reviewed_by": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": ""
+        },
+        "reviewed_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false
+    },
+    "provenance": {
+      "type": "object",
+      "description": "",
+      "properties": {
+        "extractor": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": ""
+        },
+        "extractor_version": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": ""
+        },
+        "method": {
+          "enum": [
+            "llm_v2",
+            "v1_import",
+            "dxf",
+            "manual",
+            "text_only",
+            "chat",
+            "generator",
+            "migrated_2_1",
+            null
+          ],
+          "description": ""
+        },
+        "llm_model": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": ""
+        },
+        "prompt_version": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": ""
+        },
+        "created_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "",
+          "format": "date-time"
+        },
+        "migrated_from": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Schema version this was converted from."
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": ""
+        }
+      },
+      "additionalProperties": false
+    },
+    "text": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Searchable text: title block, notes, labels."
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "scope": {
+            "const": "CSS"
+          }
+        }
+      },
+      "then": {
+        "not": {
+          "required": [
+            "dss"
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "scope": {
+            "const": "DSS"
+          }
+        }
+      },
+      "then": {
+        "not": {
+          "required": [
+            "css"
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "role": {
+            "const": "historic"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "sources",
+          "substations"
+        ],
+        "properties": {
+          "substations": {
+            "minItems": 1
+          }
+        }
+      }
+    }
+  ],
+  "definitions": {
+    "point": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 2,
+      "maxItems": 2,
+      "description": "[x, y] in the frame of the owning object (see `frame`)."
+    },
+    "polygon": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/definitions/point"
+      },
+      "minItems": 3,
+      "description": "Closed ring, first point not repeated. Units follow the owning object's frame (mm unless *_px)."
+    },
+    "polyline": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/definitions/point"
+      },
+      "minItems": 2,
+      "description": "Open line (centreline of a trench, tray, road, nalla edge)."
+    },
+    "bbox": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "number"
+      },
+      "minItems": 4,
+      "maxItems": 4,
+      "description": "[x0, y0, x1, y1]."
+    },
+    "value_sources": {
+      "type": "object",
+      "additionalProperties": {
+        "enum": [
+          "drawing_text",
+          "drawing_dimension",
+          "geometry",
+          "catalogue_unique",
+          "catalogue_lookup",
+          "chat",
+          "developer_plan",
+          "rule_default",
+          "manual_review",
+          "v1_import",
+          "derived",
+          "none"
+        ],
+        "description": ""
+      },
+      "default": {},
+      "description": "Per-field provenance, keyed by field name, e.g. {\"kva\": \"catalogue_unique\", \"H_mm\": \"drawing_dimension\"}. A field without an entry is treated as `drawing_text` for historic designs and `chat` for queries."
+    },
+    "dims": {
+      "type": "object",
+      "description": "Overall equipment size, mm.",
+      "properties": {
+        "L_mm": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Length, the longer plan side as drawn or catalogued.",
+          "minimum": 0
+        },
+        "B_mm": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Breadth / depth.",
+          "minimum": 0
+        },
+        "H_mm": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Height above its own base (platform top or finished floor).",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "side_clearances": {
+      "type": "object",
+      "description": "Clearance per side, mm. `required` comes from the catalogue (CSS_Equipments sheet); `achieved` is measured on the drawing.",
+      "properties": {
+        "front_mm": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Front (operating side).",
+          "minimum": 0
+        },
+        "back_mm": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Back.",
+          "minimum": 0
+        },
+        "left_mm": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Left, seen from the front.",
+          "minimum": 0
+        },
+        "right_mm": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Right, seen from the front.",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "rating": {
+      "type": "object",
+      "description": "Electrical rating. Fill only what the drawing, catalogue or query states.",
+      "properties": {
+        "kva": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Transformer or package rating, kVA.",
+          "minimum": 0
+        },
+        "mva": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Power transformer rating, MVA (DSS).",
+          "minimum": 0
+        },
+        "kvar": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Capacitor bank rating, kVAr.",
+          "minimum": 0
+        },
+        "ways": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Number of ways (RMU or LT panel / pillar).",
+          "minimum": 1
+        },
+        "config": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Switching configuration as written, normalised: '1CB+2ISO', '2CB+2ISO', '1CB+2LBS', 'IC-2,BC-1,OG-4'."
+        },
+        "current_a": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Breaker / busbar current, A (LT ICOG ACB 800/1250/2500/3200).",
+          "minimum": 0
+        },
+        "voltage_kv": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Primary voltage of this item, kV.",
+          "minimum": 0
+        },
+        "secondary_kv": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Secondary voltage, kV (0.433 for DTs).",
+          "minimum": 0
+        },
+        "cooling": {
+          "enum": [
+            "oil",
+            "dry",
+            "natural_ester",
+            null
+          ],
+          "description": "Transformer insulation / cooling medium."
+        }
+      },
+      "additionalProperties": false
+    },
+    "catalogue_match": {
+      "type": "object",
+      "description": "Link to the AEML equipment catalogue (Equip_DimensionRules.xlsx -> catalog.json).",
+      "properties": {
+        "item_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "catalog.json row id of the matched catalogue item."
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Catalogue row name, e.g. '1000 KVA DRY DT'."
+        },
+        "unique": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "description": "True when exactly one rating survives the dimension match."
+        },
+        "error_pct": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Worst relative error over L, B, H and weight, percent.",
+          "minimum": 0
+        },
+        "candidates": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Names of all catalogue rows within tolerance."
+        }
+      },
+      "additionalProperties": false
+    },
+    "pose": {
+      "type": "object",
+      "description": "Where an item sits. Empty for query items that are requested but not yet placed.",
+      "properties": {
+        "centre_mm": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/point"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Centroid in the room mm frame."
+        },
+        "rotation_deg": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Rotation of the item's L axis from the room x axis, degrees (0-360).",
+          "maximum": 360,
+          "minimum": 0
+        },
+        "front_side": {
+          "enum": [
+            "N",
+            "S",
+            "E",
+            "W",
+            null
+          ],
+          "description": "Wall the operating front faces (room frame, N = top of the equipment layout)."
+        },
+        "polygon_mm": {
+          "$ref": "#/definitions/polygon"
+        },
+        "bbox_px": {
+          "$ref": "#/definitions/bbox"
+        },
+        "level_mm": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Base level above the room's finished floor, mm (platform height when it stands on one)."
+        }
+      },
+      "additionalProperties": false
+    },
+    "equipment": {
+      "type": "object",
+      "description": "One piece of electrical equipment.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique within the substation, e.g. 'DT-1'."
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Text as written on the drawing ('DT-1 1500 kVA DRY', 'RMU 3W')."
+        },
+        "class": {
+          "enum": [
+            "transformer",
+            "transformer_dry",
+            "transformer_oil",
+            "switchgear",
+            "rmu",
+            "metering",
+            "ht_switchgear",
+            "ltp",
+            "packaged",
+            "aux",
+            "power_transformer",
+            "capacitor_bank",
+            "e_house"
+          ],
+          "description": "Ontology class (core/ontology.py). Drives KG typing (IS_A) and Wu-Palmer similarity."
+        },
+        "kind": {
+          "enum": [
+            "oil_dt",
+            "dry_dt",
+            "natural_ester_dt",
+            "twin_dt_pss",
+            "rmu",
+            "metering_rmu",
+            "ctpt",
+            "ht_icog",
+            "ht_panel",
+            "gis",
+            "vcb",
+            "lt_panel",
+            "lt_feeder_pillar",
+            "lt_icog",
+            "ltpcc",
+            "hybrid_lt_panel",
+            "package_ss",
+            "pad_mounted_ss",
+            "customised_ss",
+            "acdb",
+            "dcdb",
+            "battery",
+            "frtu",
+            "rtu",
+            "scada",
+            "apfc",
+            "capacitor_fixed",
+            "mineral_pt",
+            "ester_pt",
+            "dry_pt",
+            "cap_bank_ht",
+            "e_house",
+            "other",
+            null
+          ],
+          "description": "Catalogue-level kind, finer than `class`; maps to catalogue `type`."
+        },
+        "make": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Manufacturer when stated (CG, Siemens, Eaton, Schneider, ABB). Several RMU and panel sizes depend on make."
+        },
+        "rating": {
+          "$ref": "#/definitions/rating"
+        },
+        "dims": {
+          "$ref": "#/definitions/dims"
+        },
+        "weight_kg": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Static weight, kg.",
+          "minimum": 0
+        },
+        "dynamic_weight_kg": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Dynamic weight from the catalogue, kg. Used for floor loads (M6).",
+          "minimum": 0
+        },
+        "clearance_required": {
+          "$ref": "#/definitions/side_clearances"
+        },
+        "clearance_achieved": {
+          "$ref": "#/definitions/side_clearances"
+        },
+        "ceiling_clearance_mm": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Required gap from the item's top to the beam bottom or tray, mm.",
+          "minimum": 0
+        },
+        "cable_entry": {
+          "enum": [
+            "bottom",
+            "top",
+            "front",
+            "side",
+            null
+          ],
+          "description": "How cables enter. Bottom entry needs a cutout or trench below."
+        },
+        "pose": {
+          "$ref": "#/definitions/pose"
+        },
+        "contains": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "transformer",
+              "transformer_dry",
+              "transformer_oil",
+              "switchgear",
+              "rmu",
+              "metering",
+              "ht_switchgear",
+              "ltp",
+              "packaged",
+              "aux",
+              "power_transformer",
+              "capacitor_bank",
+              "e_house"
+            ],
+            "description": ""
+          },
+          "default": [],
+          "description": "For packaged / unitised substations: the classes inside the enclosure."
+        },
+        "status": {
+          "enum": [
+            "existing",
+            "proposed",
+            "future",
+            "requested",
+            null
+          ],
+          "description": "'requested' = a query item with no placement yet."
+        },
+        "catalogue": {
+          "$ref": "#/definitions/catalogue_match"
+        },
+        "value_sources": {
+          "$ref": "#/definitions/value_sources"
+        },
+        "segment_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Mask segments that draw this item."
+        },
+        "extra": {
+          "type": "object",
+          "description": "Free-form fields the extractor or reviewer wants to keep. Nothing in retrieval or scoring reads this.",
+          "default": {}
+        }
+      },
+      "required": [
+        "id",
+        "class"
+      ],
+      "additionalProperties": false
+    },
+    "structure": {
+      "type": "object",
+      "description": "Beam, column or other member inside or over the room.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "beam",
+            "column",
+            "shear_wall",
+            "plinth",
+            "slab_edge"
+          ],
+          "description": "Structural member."
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "As written ('B1 300x600', 'C3')."
+        },
+        "polygon_mm": {
+          "$ref": "#/definitions/polygon"
+        },
+        "polyline_mm": {
+          "$ref": "#/definitions/polyline"
+        },
+        "width_mm": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Section width, mm.",
+          "minimum": 0
+        },
+        "depth_mm": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Section depth, mm (beam depth below slab).",
+          "minimum": 0
+        },
+        "bottom_mm": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Beam bottom above finished floor, mm. The value the height and tray checks use.",
+          "minimum": 0
+        },
+        "value_sources": {
+          "$ref": "#/definitions/value_sources"
+        },
+        "segment_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": ""
+        },
+        "extra": {
+          "type": "object",
+          "description": "Free-form fields the extractor or reviewer wants to keep. Nothing in retrieval or scoring reads this.",
+          "default": {}
+        }
+      },
+      "required": [
+        "id",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "opening": {
+      "type": "object",
+      "description": "Door, shutter, fire exit, louvre, window, slab cutout, staircase or cable riser.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "door",
+            "rolling_shutter",
+            "fire_exit",
+            "gate",
+            "flood_gate",
+            "louvre",
+            "window",
+            "cutout",
+            "staircase",
+            "cable_riser",
+            "cable_entry"
+          ],
+          "description": "Opening type. Cutouts are slab openings for cable entry."
+        },
+        "purpose": {
+          "enum": [
+            "main",
+            "emergency",
+            "transformer",
+            "equipment",
+            "manual",
+            "ventilation",
+            "cable",
+            null
+          ],
+          "description": "Role of the opening. Main and emergency door are chosen per layout option (SIPOC task 2)."
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "As written."
+        },
+        "width_mm": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Clear width, mm. Catalogue minimum: transformer door 2750, equipment door 1500, manual door 1500.",
+          "minimum": 0
+        },
+        "height_mm": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Clear height, mm. Catalogue: transformer door 3000, equipment 2500, manual 2100, louvre 750.",
+          "minimum": 0
+        },
+        "length_mm": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Cutout length, mm.",
+          "minimum": 0
+        },
+        "sill_mm": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Sill level above finished floor, mm (louvres, windows)."
+        },
+        "wall": {
+          "enum": [
+            "N",
+            "S",
+            "E",
+            "W",
+            null
+          ],
+          "description": "Wall it sits on (room frame, N = top)."
+        },
+        "faces_road": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "description": "True when this opening faces the DP or internal road."
+        },
+        "exhaust_fan": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "description": "Louvres and windows: with exhaust fan."
+        },
+        "serves": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Equipment ids this opening serves (cutout under DT-1, transformer door for DT-2)."
+        },
+        "centre_mm": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/point"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "polygon_mm": {
+          "$ref": "#/definitions/polygon"
+        },
+        "bbox_px": {
+          "$ref": "#/definitions/bbox"
+        },
+        "value_sources": {
+          "$ref": "#/definitions/value_sources"
+        },
+        "segment_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": ""
+        },
+        "extra": {
+          "type": "object",
+          "description": "Free-form fields the extractor or reviewer wants to keep. Nothing in retrieval or scoring reads this.",
+          "default": {}
+        }
+      },
+      "required": [
+        "id",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "route": {
+      "type": "object",
+      "description": "Cable trench, tray, HDPE entry, earthing strip, wayleave or access path.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "trench",
+            "cable_tray",
+            "hdpe",
+            "buried",
+            "access_path",
+            "wayleave",
+            "earthing_strip"
+          ],
+          "description": "Route type."
+        },
+        "kind": {
+          "enum": [
+            "HT",
+            "LT",
+            "HT/LT",
+            "vehicle",
+            "staff",
+            "earthing",
+            null
+          ],
+          "description": "What the route carries."
+        },
+        "construction": {
+          "enum": [
+            "precast_cover",
+            "box_trench",
+            "hdpe_pipe",
+            "buried",
+            "tray",
+            "open",
+            null
+          ],
+          "description": "Trench construction (catalogue 'Other items')."
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "As written ('H.T. CABLE TRENCH (0.75M X 1.35M)')."
+        },
+        "width_mm": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Width, mm. Trench min 750; tray 150/300/450/600/750/900; wayleave 6000.",
+          "minimum": 0
+        },
+        "depth_mm": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Depth, mm. Trench 1350 typical.",
+          "minimum": 0
+        },
+        "length_mm": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Route length, mm.",
+          "minimum": 0
+        },
+        "level_mm": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Trays: level above finished floor, mm (catalogue: 450 below beam bottom)."
+        },
+        "hdpe_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Number of HDPE pipes.",
+          "minimum": 0
+        },
+        "hdpe_dia_mm": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "HDPE pipe diameter, mm.",
+          "minimum": 0
+        },
+        "from_ref": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Id of the start (equipment, opening, site feature)."
+        },
+        "to_ref": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Id of the end."
+        },
+        "serves": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Equipment ids whose cables use this route."
+        },
+        "polyline_mm": {
+          "$ref": "#/definitions/polyline"
+        },
+        "polygon_mm": {
+          "$ref": "#/definitions/polygon"
+        },
+        "frame": {
+          "enum": [
+            "room_mm",
+            "site_mm"
+          ],
+          "description": "Which mm frame the geometry is in."
+        },
+        "value_sources": {
+          "$ref": "#/definitions/value_sources"
+        },
+        "segment_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": ""
+        },
+        "extra": {
+          "type": "object",
+          "description": "Free-form fields the extractor or reviewer wants to keep. Nothing in retrieval or scoring reads this.",
+          "default": {}
+        }
+      },
+      "required": [
+        "id",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "relation": {
+      "type": "object",
+      "description": "A spatial fact between two entities. Computed once at load and used by both the KG and the scorer.",
+      "properties": {
+        "type": {
+          "enum": [
+            "UNDER",
+            "BELOW_BEAM",
+            "CLEARANCE",
+            "ON_WALL",
+            "FACES",
+            "CONNECTS",
+            "DISTANCE_TO",
+            "SERVES",
+            "CONTAINS"
+          ],
+          "description": "Edge type in the knowledge graph."
+        },
+        "a": {
+          "type": "string",
+          "description": "Source entity id (equipment, opening, structure, route, substation or site feature)."
+        },
+        "b": {
+          "type": "string",
+          "description": "Target entity id, or a free label when the target is not an entity ('compound wall')."
+        },
+        "mm": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Measured distance or offset, mm."
+        },
+        "side": {
+          "enum": [
+            "front",
+            "back",
+            "left",
+            "right",
+            "top",
+            "bottom",
+            null
+          ],
+          "description": "CLEARANCE: which side of `a`."
+        },
+        "axis": {
+          "enum": [
+            "x",
+            "y",
+            "diagonal",
+            "overlap",
+            null
+          ],
+          "description": "CLEARANCE: how the gap is measured (replaces 2.1 side_by_side_x / _y)."
+        },
+        "wall": {
+          "enum": [
+            "N",
+            "S",
+            "E",
+            "W",
+            null
+          ],
+          "description": "ON_WALL: wall id."
+        },
+        "angle_deg": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "FACES: angle between the opening normal and the direction to the road, degrees.",
+          "maximum": 180,
+          "minimum": 0
+        },
+        "norm_mm": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Required distance from the catalogue or plot norms, mm.",
+          "minimum": 0
+        },
+        "meets_norm": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "description": "mm >= norm_mm."
+        },
+        "source": {
+          "enum": [
+            "drawing_dimension",
+            "geometry",
+            "derived",
+            "manual_review",
+            "v1_import",
+            null
+          ],
+          "description": ""
+        },
+        "extra": {
+          "type": "object",
+          "description": "Free-form fields the extractor or reviewer wants to keep. Nothing in retrieval or scoring reads this.",
+          "default": {}
+        }
+      },
+      "required": [
+        "type",
+        "a",
+        "b"
+      ],
+      "additionalProperties": false
+    },
+    "segment": {
+      "type": "object",
+      "description": "One extracted mask. Masks are evidence; the typed entities above are what retrieval reads.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "cls": {
+          "type": "string",
+          "description": "Mask class (settings.extraction.mask_classes)."
+        },
+        "entity_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Id of the equipment / opening / structure / route / site feature this mask draws."
+        },
+        "substation_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": ""
+        },
+        "layout_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": ""
+        },
+        "page": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        },
+        "polygon_px": {
+          "$ref": "#/definitions/polygon"
+        },
+        "polygon_mm": {
+          "$ref": "#/definitions/polygon"
+        },
+        "polyline_mm": {
+          "$ref": "#/definitions/polyline"
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": ""
+        },
+        "source": {
+          "enum": [
+            "llm",
+            "legend_colour",
+            "vector",
+            "dxf",
+            "v1",
+            "derived",
+            "manual",
+            null
+          ],
+          "description": "How the mask was produced."
+        },
+        "confidence": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "0-1. Scales the mask's weight in matching.",
+          "maximum": 1,
+          "minimum": 0
+        },
+        "mask_path": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "PNG path, display only."
+        }
+      },
+      "required": [
+        "id",
+        "cls"
+      ],
+      "additionalProperties": false
+    },
+    "layout": {
+      "type": "object",
+      "description": "One view on a sheet.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "page": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        },
+        "type": {
+          "enum": [
+            "equipment_layout",
+            "css_layout",
+            "section",
+            "elevation",
+            "site_plan",
+            "key_plan",
+            "wayleave",
+            "beam_layout",
+            "cutout_layout",
+            "cable_tray_layout",
+            "platform_layout",
+            "ms_plate_layout",
+            "earthing_layout",
+            "detail",
+            "legend",
+            "title_block",
+            "legend_and_title_block",
+            "notes",
+            "table",
+            "sheet",
+            "unknown"
+          ],
+          "description": "Drawing view type. AEML's standard set is equipment+earthing, platform, cutout, tray/trench and section."
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": ""
+        },
+        "floor": {
+          "enum": [
+            "lower_basement",
+            "basement",
+            "upper_basement",
+            "ground",
+            "stilt",
+            "podium",
+            "mezzanine",
+            "first",
+            "second",
+            "third",
+            "upper",
+            "terrace",
+            "open_ground",
+            null
+          ],
+          "description": ""
+        },
+        "bbox_px": {
+          "$ref": "#/definitions/bbox"
+        },
+        "dpi": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "",
+          "minimum": 0
+        },
+        "mm_per_px": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Scale of the crop.",
+          "minimum": 0
+        },
+        "scale_text": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "As written ('1:100')."
+        },
+        "scale_source": {
+          "enum": [
+            "dimension_fit",
+            "scale_text",
+            "dxf_units",
+            "v1",
+            "none",
+            null
+          ],
+          "description": ""
+        },
+        "scale_confidence": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "",
+          "maximum": 1,
+          "minimum": 0
+        },
+        "crop_image": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": ""
+        }
+      },
+      "required": [
+        "id",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "floor_ref": {
+      "type": "object",
+      "description": "Which floor a substation is on.",
+      "properties": {
+        "name": {
+          "enum": [
+            "lower_basement",
+            "basement",
+            "upper_basement",
+            "ground",
+            "stilt",
+            "podium",
+            "mezzanine",
+            "first",
+            "second",
+            "third",
+            "upper",
+            "terrace",
+            "open_ground",
+            null
+          ],
+          "description": "Floor name. 'stilt' and 'podium' are kept apart from 'ground' because the structure below differs."
+        },
+        "level_index": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "0 = ground, -1 = first basement, 1 = first floor, ..."
+        },
+        "ffl_mm": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Finished floor level relative to ground level, mm."
+        },
+        "floor_to_floor_mm": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Floor-to-floor height, mm.",
+          "minimum": 0
+        },
+        "below": {
+          "enum": [
+            "basement",
+            "earth",
+            "floor",
+            "unknown",
+            null
+          ],
+          "description": "What is under the substation: basement, mother earth or another floor. Drives trench vs cutout entry."
+        }
+      },
+      "additionalProperties": false
+    },
+    "substation": {
+      "type": "object",
+      "description": "One substation (room or marked area).",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "S1, S2, ... unique within the spec."
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "As written ('CSS-1', '12A')."
+        },
+        "floor": {
+          "$ref": "#/definitions/floor_ref"
+        },
+        "footprint": {
+          "type": "object",
+          "description": "Substation footprint: the room when indoor, the marked area when open to sky.",
+          "properties": {
+            "polygon_mm": {
+              "$ref": "#/definitions/polygon"
+            },
+            "length_mm": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "description": "Longer side, mm.",
+              "minimum": 0
+            },
+            "width_mm": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "description": "Shorter side, mm.",
+              "minimum": 0
+            },
+            "area_m2": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "description": "Usable area, m^2. CSS 20-200 m^2 per AEML (DSS 200-800).",
+              "minimum": 0
+            },
+            "shape": {
+              "enum": [
+                "rectangular",
+                "l_shaped",
+                "chamfered",
+                "trapezoidal",
+                "irregular",
+                null
+              ],
+              "description": ""
+            },
+            "frame_note": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Origin = top-left of the room's bounding box, x right, y down, mm."
+            }
+          },
+          "additionalProperties": false
+        },
+        "heights": {
+          "type": "object",
+          "description": "Vertical dimensions.",
+          "properties": {
+            "clear_height_mm": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "description": "Finished floor to the lowest obstruction (beam bottom or soffit), mm. CSS min 4200.",
+              "minimum": 0
+            },
+            "slab_to_soffit_mm": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "description": "",
+              "minimum": 0
+            },
+            "beam_bottom_mm": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "description": "Lowest beam bottom over the room, mm.",
+              "minimum": 0
+            },
+            "plinth_mm": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "description": "Plinth above ground level, mm (open to sky).",
+              "minimum": 0
+            },
+            "trench_depth_mm": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "description": "",
+              "minimum": 0
+            },
+            "section_layout_id": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Section the heights were read from."
+            },
+            "section_reason": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Why that section was chosen when several exist."
+            },
+            "value_sources": {
+              "$ref": "#/definitions/value_sources"
+            }
+          },
+          "additionalProperties": false
+        },
+        "platform": {
+          "type": "object",
+          "description": "Raised platform or plinth the equipment stands on.",
+          "properties": {
+            "present": {
+              "type": [
+                "boolean",
+                "null"
+              ],
+              "description": ""
+            },
+            "type": {
+              "enum": [
+                "ms_steel",
+                "rcc_plinth",
+                "raised_floor",
+                "stepped",
+                "other",
+                null
+              ],
+              "description": ""
+            },
+            "height_mm": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "description": "Highest platform top above finished floor, mm. Catalogue: 1000 / 1200.",
+              "minimum": 0
+            },
+            "levels": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "description": "",
+                "properties": {
+                  "height_mm": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "description": "",
+                    "minimum": 0
+                  },
+                  "serves": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "default": [],
+                    "description": ""
+                  }
+                },
+                "additionalProperties": false
+              },
+              "default": [],
+              "description": "Stepped platforms: one level per group of equipment (e.g. +1200 RMU, +1000 LT PCC, +800 DT)."
+            },
+            "steel": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Steel section as written ('ISMC 75 + MS plates')."
+            },
+            "polygon_mm": {
+              "$ref": "#/definitions/polygon"
+            },
+            "description": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Free text from the drawing."
+            }
+          },
+          "additionalProperties": false
+        },
+        "equipment": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/equipment"
+          },
+          "default": [],
+          "description": ""
+        },
+        "structures": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/structure"
+          },
+          "default": [],
+          "description": ""
+        },
+        "openings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/opening"
+          },
+          "default": [],
+          "description": "All openings in one list (2.1 split them across access, ventilation and cable.cutouts)."
+        },
+        "routes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/route"
+          },
+          "default": [],
+          "description": "Routes inside the room (site-level routes go under site.features or site.routes)."
+        },
+        "earthing_pits": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "description": "",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "centre_mm": {
+                "anyOf": [
+                  {
+                    "$ref": "#/definitions/point"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "frame": {
+                "enum": [
+                  "room_mm",
+                  "site_mm"
+                ],
+                "description": ""
+              },
+              "label": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": ""
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false
+          },
+          "default": [],
+          "description": ""
+        },
+        "relations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/relation"
+          },
+          "default": [],
+          "description": "Spatial facts (replaces 2.1 `clearances`)."
+        },
+        "counts": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "default": {},
+          "description": "Derived: count per equipment class. Rebuilt from `equipment` on validation."
+        },
+        "equipment_layout_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": ""
+        },
+        "mm_per_px": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "",
+          "minimum": 0
+        },
+        "extra": {
+          "type": "object",
+          "description": "Free-form fields the extractor or reviewer wants to keep. Nothing in retrieval or scoring reads this.",
+          "default": {}
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "site_feature": {
+      "type": "object",
+      "description": "Something on the plot around the substation. Geometry in the site mm frame.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "cls": {
+          "enum": [
+            "site_boundary",
+            "plot_boundary",
+            "building_footprint",
+            "rg_area",
+            "nalla",
+            "dp_road",
+            "internal_road",
+            "compound_wall",
+            "structure",
+            "tree",
+            "wayleave",
+            "access_path",
+            "maintenance_space",
+            "trench",
+            "earthing_pit",
+            "existing_substation"
+          ],
+          "description": "Site feature class."
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": ""
+        },
+        "layout_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": ""
+        },
+        "polygon_mm": {
+          "$ref": "#/definitions/polygon"
+        },
+        "polyline_mm": {
+          "$ref": "#/definitions/polyline"
+        },
+        "polygon_px": {
+          "$ref": "#/definitions/polygon"
+        },
+        "width_m": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Road / wayleave width, m.",
+          "minimum": 0
+        },
+        "area_m2": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "",
+          "minimum": 0
+        },
+        "extra": {
+          "type": "object",
+          "description": "Free-form fields the extractor or reviewer wants to keep. Nothing in retrieval or scoring reads this.",
+          "default": {}
+        }
+      },
+      "required": [
+        "id",
+        "cls"
+      ],
+      "additionalProperties": false
+    },
+    "clearance_check": {
+      "type": "object",
+      "description": "One plot-clearance check (Plot Clerances sheet).",
+      "properties": {
+        "substation_id": {
+          "type": "string"
+        },
+        "feature_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": ""
+        },
+        "feature_cls": {
+          "enum": [
+            "compound_wall",
+            "plot_boundary",
+            "dp_road",
+            "internal_road",
+            "nalla",
+            "structure",
+            "tree",
+            "tree_at_door",
+            "maintenance_space",
+            "wayleave"
+          ],
+          "description": ""
+        },
+        "distance_mm": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Shortest distance from the substation footprint (or its door) to the feature, mm.",
+          "minimum": 0
+        },
+        "norm_mm": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "CSS norms: compound 1500, DP road 4500, internal road 1500, nalla 6000, structure 6000, tree 1500 (4500 at doors), maintenance 0, wayleave width 6000. DSS: compound 4500 all sides, internal road 4500, maintenance 6000.",
+          "minimum": 0
+        },
+        "meets_norm": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "description": ""
+        },
+        "method": {
+          "enum": [
+            "drawing_dimension",
+            "geometry",
+            "manual_review",
+            null
+          ],
+          "description": ""
+        }
+      },
+      "required": [
+        "substation_id",
+        "feature_cls"
+      ],
+      "additionalProperties": false
+    },
+    "requested_item": {
+      "type": "object",
+      "description": "Equipment the query asks for, before any placement.",
+      "properties": {
+        "class": {
+          "enum": [
+            "transformer",
+            "transformer_dry",
+            "transformer_oil",
+            "switchgear",
+            "rmu",
+            "metering",
+            "ht_switchgear",
+            "ltp",
+            "packaged",
+            "aux",
+            "power_transformer",
+            "capacitor_bank",
+            "e_house"
+          ],
+          "description": ""
+        },
+        "kind": {
+          "enum": [
+            "oil_dt",
+            "dry_dt",
+            "natural_ester_dt",
+            "twin_dt_pss",
+            "rmu",
+            "metering_rmu",
+            "ctpt",
+            "ht_icog",
+            "ht_panel",
+            "gis",
+            "vcb",
+            "lt_panel",
+            "lt_feeder_pillar",
+            "lt_icog",
+            "ltpcc",
+            "hybrid_lt_panel",
+            "package_ss",
+            "pad_mounted_ss",
+            "customised_ss",
+            "acdb",
+            "dcdb",
+            "battery",
+            "frtu",
+            "rtu",
+            "scada",
+            "apfc",
+            "capacitor_fixed",
+            "mineral_pt",
+            "ester_pt",
+            "dry_pt",
+            "cap_bank_ht",
+            "e_house",
+            "other",
+            null
+          ],
+          "description": ""
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        },
+        "rating": {
+          "$ref": "#/definitions/rating"
+        },
+        "make": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": ""
+        },
+        "floor": {
+          "enum": [
+            "lower_basement",
+            "basement",
+            "upper_basement",
+            "ground",
+            "stilt",
+            "podium",
+            "mezzanine",
+            "first",
+            "second",
+            "third",
+            "upper",
+            "terrace",
+            "open_ground",
+            null
+          ],
+          "description": "Floor it must go on, when the query splits equipment across floors."
+        }
+      },
+      "required": [
+        "class"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
