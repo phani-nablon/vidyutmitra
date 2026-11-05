@@ -106,8 +106,15 @@ chmod 600 .env
 nano .env
 ```
 
-Set at least `OPENAI_API_KEY=...` (`ASTRA_API_KEY` also accepted). Add `OPENAI_BASE_URL=...` if the LLM is behind a
+Set `OPENAI_API_KEY=...` (`ASTRA_API_KEY` also accepted). Add `OPENAI_BASE_URL=...` if the LLM is behind a
 gateway. The app reads `.env` from the repo folder or any parent folder. `.env` is gitignored; never commit it.
+
+No secrets are stored in the repo:
+
+| Secret | Where it comes from |
+|---|---|
+| LLM key | `.env` only. **Optional**: without a key, extraction replays the committed LLM cache (section 4.1) |
+| Neo4j password | `SR_NEO4J_PASSWORD` in `.env` if set; otherwise `sr neo4j-start` generates a random one into `var/neo4j/.password` (mode 600, gitignored) and the app reads it from there |
 
 ### 2.4 Start Neo4j and load the reviewed drawings
 
@@ -115,7 +122,7 @@ gateway. The app reads `.env` from the repo folder or any parent folder. `.env` 
 uv run sr neo4j-start      # checks Java, downloads Neo4j Community once (~130 MB) into var/neo4j, sets the password, starts it
 uv run sr neo4j-check      # graph reachable, constraint and index created
 uv run sr import-v1        # loads the 50 reviewed drawings into Neo4j + the RAG index (no LLM cost, ~20 s)
-uv run sr health           # "llm": {"available": true, ...} confirms the key was picked up
+uv run sr health           # "llm": {"available": true, ...} confirms the key was picked up (false is fine in cache-only mode)
 ```
 
 `sr` is this repo's command-line tool. Three equivalent ways to call it:
@@ -178,7 +185,7 @@ Other run-time commands:
 | `sr neo4j-stop` | stops Neo4j |
 | `uv run pytest` | test suite (synthetic data, no network) |
 
-Neo4j Browser (optional) is at http://127.0.0.1:7474 (user `neo4j`, password from `graph.neo4j_password`).
+Neo4j Browser (optional) is at http://127.0.0.1:7474 (user `neo4j`, password: `cat var/neo4j/.password`, or your `SR_NEO4J_PASSWORD`).
 
 ## 4. Extract drawings with the LLM (extraction v2)
 
@@ -207,6 +214,33 @@ sr ingest ~/new_drawings --no-v1 --wait              # a whole folder
 
 You can also use the UI: **Library & ingest → choose files → untick "reuse v1 extraction" → Upload & ingest**.
 Each file is a job: extract → review gate → Neo4j upsert → RAG upsert → new index version.
+
+### 4.1 LLM cache (committed, works without a key)
+
+Every LLM reply is saved in `var/cache/llm/<sha256>__<prompt_version>__<pass>.json`. This folder **is committed to git**
+(the rest of `var/` is not), so a fresh clone replays all past extractions with no key and no cost:
+
+```bash
+sr extract-all --workers 4 --index     # no key: cached drawings replay from var/cache/llm, others are "skipped" in the report
+```
+
+How it behaves:
+
+| Situation | Result |
+|---|---|
+| key set, reply cached | cache used, no API call |
+| key set, not cached | API call, reply added to the cache |
+| no key, drawing cached | cache replayed, full v2 extraction |
+| no key, not cached | `extract-all` skips it; `sr ingest` / UI upload fall back to text-only extraction |
+
+The cache is keyed on the drawing's sha256 and `extraction.prompt_version` (`config/settings.yaml`). Bumping the prompt
+version invalidates it. After a run with a key, commit the new replies:
+
+```bash
+git add var/cache/llm && git commit -m "LLM cache: new replies"
+```
+
+The replies contain extracted drawing content (client data), so keep the repo private.
 
 ## 5. Using the UI
 
@@ -247,7 +281,7 @@ cannot stop the app.
 | Setting | Env var | Default |
 |---|---|---|
 | graph backend | `SR_GRAPH_BACKEND` | `neo4j` (`sqlite` = tests/offline only) |
-| Neo4j URI / user / password | `SR_NEO4J_URI`, `SR_NEO4J_USER`, `SR_NEO4J_PASSWORD` | `bolt://localhost:7687`, `neo4j`, `substation-local` (local server only) |
+| Neo4j URI / user / password | `SR_NEO4J_URI`, `SR_NEO4J_USER`, `SR_NEO4J_PASSWORD` | `bolt://localhost:7687`, `neo4j`, generated into `var/neo4j/.password` |
 | retrieval mode | `SR_RETRIEVAL_MODE` | `auto` (`kg`, `rag`, `both`) |
 | engines on/off | `CSS_KG_ENABLED`, `CSS_RAG_ENABLED` | `true` |
 | LLM model / style | `SR_LLM_MODEL`, `SR_LLM_API_STYLE` | `gpt-6-astra` (model id), `responses` (`chat` for gateways) |
@@ -256,7 +290,7 @@ cannot stop the app.
 The scoring weights, verdict thresholds (0.80 / 0.60), plot-clearance norms and catalogue tolerances are also in
 `settings.yaml`.
 
-## 8. Workspace (`var/`, gitignored)
+## 8. Workspace (`var/`, gitignored except `var/cache/llm/`)
 
 | Path | Content |
 |---|---|
@@ -265,7 +299,9 @@ The scoring weights, verdict thresholds (0.80 / 0.60), plot-clearance norms and 
 | `var/db/jobs.sqlite` | ingest job queue |
 | `var/extractions/<doc_id>/doc.json` | schema-2.1 extraction per drawing (source of truth for `sr rebuild`) |
 | `var/artifacts/<doc_id>/` | page renders, crops, overlays, masks, raw LLM JSON |
-| `var/cache/llm/`, `var/models/`, `var/reports/` | LLM cache, DINOv2 weights, extraction reports |
+| `var/cache/llm/` | LLM replies, **committed** (section 4.1) |
+| `var/neo4j/.password` | generated Neo4j password (when `SR_NEO4J_PASSWORD` is not set) |
+| `var/models/`, `var/reports/` | DINOv2 weights, extraction reports |
 
 ## 9. Commands
 
@@ -282,7 +318,8 @@ uv run pytest           # 18 tests, synthetic data, no network
 |---|---|
 | `Neo4j at bolt://localhost:7687 is not reachable` | `sr neo4j-start`; if it fails, `sr neo4j-status` shows the Java version and the server log tail |
 | `Java not found` and the portable download fails | `sudo apt install -y openjdk-17-jre-headless`, open a new shell (or set `JAVA_HOME`) |
-| `"llm": {"available": false}` | the key line is missing in `.env`; check the name `OPENAI_API_KEY` (or `ASTRA_API_KEY`) |
+| `"llm": {"available": false}` | expected in cache-only mode; to call the LLM, add `OPENAI_API_KEY` (or `ASTRA_API_KEY`) to `.env` |
+| Neo4j auth error after upgrading an old install | the old default password was `substation-local`: put `SR_NEO4J_PASSWORD=substation-local` in `.env`, or delete `var/neo4j/data/dbms/auth.ini` and run `sr neo4j-start` again |
 | LLM 404 / connection error | set `OPENAI_BASE_URL` for your gateway, or `SR_LLM_API_STYLE=chat` |
 | Search says "fallback to RAG" | expected when the query is thin, or Neo4j is down; see the trace line |
 | Masks / drawing views say "no image" | for v1 drawings, `SR_V1_DIR` must point at `css_parsed`; for v2, keep `var/artifacts` |
