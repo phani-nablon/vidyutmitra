@@ -258,8 +258,9 @@ def login(body: LoginIn, response: Response):
     if not u:
         time.sleep(0.5)   # slows down password guessing a little; there is no lockout
         raise HTTPException(401, "Wrong username or password")
+    # no max_age: a browser-session cookie, so closing the browser means signing in again with the ID and
+    # password; the token inside still expires after auth.session_hours however long the browser stays open
     response.set_cookie(COOKIE, issue(u, s), httponly=True, samesite="lax", path="/",
-                        max_age=int(float(s.get("auth.session_hours", 12)) * 3600),
                         secure=bool(s.get("auth.secure_cookie", False)))
     return {"user": public(u)}
 

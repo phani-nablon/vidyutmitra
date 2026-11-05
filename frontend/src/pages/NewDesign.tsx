@@ -336,7 +336,7 @@ export function NewDesign() {
           Design inputs
         </button>
         <button className={`tab${mode === 'builder' ? ' on' : ''}`} onClick={() => setMode('builder')}>
-          Step by step
+          Design rules
         </button>
         <button className={`tab${mode === 'prompt' ? ' on' : ''}`} onClick={() => setMode('prompt')}>
           Describe in words

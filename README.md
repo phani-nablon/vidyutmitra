@@ -265,7 +265,7 @@ npm run dev        # http://localhost:5173, proxies /api to a running `sr serve`
 npm run build      # refresh api/web after UI changes
 ```
 
-- **Create new.** *Step by step* asks, in plain words, where the substation sits, the equipment list
+- **Create new.** *Design rules* (the step-by-step builder) asks, in plain words, where the substation sits, the equipment list
   (count × type, kVA, dry/oil, ways), room size and height in metres, doors and civil features, and nearby
   nalla / DP road / tree distances. It is sent as a structured query (`POST /api/search`), so only the
   fields filled in are scored. *Describe in words* is the chat (`POST /api/chat`) with follow-ups. Each
@@ -300,7 +300,7 @@ npm run build      # refresh api/web after UI changes
   the review page (matched by content hash, else by name), and a project's parsed parameters can be sent
   to Create new with *Use as design inputs*. The page also has *Find a drawing* (B6) over the same
   parameters.
-- **Design rules** (`/rules`, R5): browse by section, search, filter (to confirm, edited, drives a check),
+- **Design rules** (R5, API only for now: `/api/rules`; the page is not linked from the menu): browse by section, search, filter (to confirm, edited, drives a check),
   add, edit, duplicate, delete, reset to extracted, export / import JSON, and *Load workbook* to rebuild
   the rules from `Equip_DimensionRules.xlsx` with `scripts/build_rules.py` (needs `openpyxl`:
   `uv pip install openpyxl`). Rules added by hand survive a reload unless you untick the option. Changes
@@ -309,7 +309,7 @@ npm run build      # refresh api/web after UI changes
 ### 5.3 Sign-in and roles
 
 Every page and every `/api` call except `/api/health` needs a sign-in (`api/auth.py`). The session is a
-signed HttpOnly cookie that lasts `auth.session_hours` (12 by default). `/classic` sends you to the same
+signed HttpOnly cookie that ends when the browser closes, and after `auth.session_hours` (12 by default) at the latest. `/classic` sends you to the same
 sign-in page.
 
 | Role | Can |
@@ -319,8 +319,8 @@ sign-in page.
 | Admin  | + engines, import / rebuild, delete drawings, manage users, edit / load design rules |
 
 On first start `var/auth/users.json` is created with the VidyutMitra development accounts:
-`admin` / `Admin@123`, `draftsman` / `Editor@123`, `viewer` / `Viewer@123`. The sign-in page lists them
-until all three passwords are changed. Change them before anyone else uses the app:
+`admin` / `Admin@123`, `draftsman` / `Editor@123`, `viewer` / `Viewer@123`. The sign-in page asks for the
+login ID and password; it does not list accounts. Change these passwords before anyone else uses the app:
 
 ```bash
 sr users                                   # list accounts

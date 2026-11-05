@@ -109,10 +109,6 @@ export function Shell() {
           <Nl to="/review" icon={I.review} mark={pending > 0}>
             Review drawings
           </Nl>
-          <div className="navhead">Rules</div>
-          <Nl to="/rules" icon={I.rules}>
-            Design rules
-          </Nl>
           <div className="navhead">Tools</div>
           <a className="nlink" href="/classic">
             {I.classic}

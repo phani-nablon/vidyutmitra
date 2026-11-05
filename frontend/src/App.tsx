@@ -9,7 +9,6 @@ import { NewDesign } from './pages/NewDesign';
 import { ReviewQueue } from './pages/ReviewQueue';
 import { ReviewDrawing } from './pages/ReviewDrawing';
 import { RepoDivisions, RepoHome, RepoProjectPage, RepoProjects } from './pages/Repository';
-import { Rules } from './pages/Rules';
 
 function RequireAuth({ children }: { children: ReactElement }) {
   const { user, loading } = useAuth();
@@ -38,7 +37,6 @@ export function App() {
         <Route path="repo/p/:id" element={<RepoProjectPage />} />
         <Route path="repo/:category" element={<RepoDivisions />} />
         <Route path="repo/:category/:division" element={<RepoProjects />} />
-        <Route path="rules" element={<Rules />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

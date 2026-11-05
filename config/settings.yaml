@@ -16,7 +16,7 @@ server:
 
 auth:
   enabled: true                # SR_AUTH_ENABLED  false = no sign-in, everyone is admin (local use only)
-  session_hours: 12            # how long a sign-in lasts
+  session_hours: 12            # longest a sign-in lasts; closing the browser also ends it
   secure_cookie: false         # true when served over HTTPS
   # accounts: var/auth/users.json (created with the dev accounts on first start; manage with sr users / sr user-add)
   # signing key: var/auth/secret (random), or SR_AUTH_SECRET
