@@ -39,6 +39,7 @@ ENV_MAP = {
     "SR_NEO4J_USER": "graph.neo4j_user",
     "SR_HOST": "server.host",
     "SR_PORT": "server.port",
+    "SR_AUTH_ENABLED": "auth.enabled",
 }
 
 

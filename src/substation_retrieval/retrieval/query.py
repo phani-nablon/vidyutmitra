@@ -51,6 +51,10 @@ def build_query(text: str = "", structured: dict | None = None, siteplan: dict |
         if isinstance(structured.get("equipment"), dict) and not structured.get("equipment_items"):
             q.pop("equipment_items", None)
             q = _parse_text(json.dumps(q))
+        elif structured.get("equipment_items"):
+            # builder input: derive counts / kva / ways from the explicit items, as the text parser does
+            from .query_parser import _finalise
+            q = _finalise(q)
     if text:
         d = _site_distances(text)
         if d:

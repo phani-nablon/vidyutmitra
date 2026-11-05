@@ -14,6 +14,13 @@ server:
   watch_folder: false          # poll paths.watch_dir for new files
   watch_interval_s: 10
 
+auth:
+  enabled: true                # SR_AUTH_ENABLED  false = no sign-in, everyone is admin (local use only)
+  session_hours: 12            # how long a sign-in lasts
+  secure_cookie: false         # true when served over HTTPS
+  # accounts: var/auth/users.json (created with the dev accounts on first start; manage with sr users / sr user-add)
+  # signing key: var/auth/secret (random), or SR_AUTH_SECRET
+
 llm:
   provider: openai             # SR_LLM_PROVIDER  openai | anthropic | none
   model: gpt-6-astra           # SR_LLM_MODEL (model id)

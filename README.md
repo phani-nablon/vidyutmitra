@@ -21,7 +21,11 @@ The parts:
 - **RAG (fallback engine).** BM25 + feature vector + mask rasters (+ DINOv2 image embeddings when installed),
   re-ranked with the same geometry and compatibility checks.
 - **Incremental ingestion.** One job per file (or a bulk folder), with index versioning. No full rebuild is needed.
-- **UI** at http://127.0.0.1:8077 with five tabs:
+- **Workbench UI** at http://127.0.0.1:8077, styled with the Nablon Meridian design system (SLIDe), with two pages:
+  - **Create new** (`/new`): a step-by-step query builder or a plain-text prompt, plus an optional site plan
+  - **Review drawings** (`/review`): drawings sorted by open actions, each shown with its fields over the
+    original sheet; correct a value, mark it right or wrong, submit to re-index
+- **Classic UI** at http://127.0.0.1:8077/classic with five tabs:
   - Chat
   - Library & ingest
   - Ontology (tree)
@@ -243,6 +247,71 @@ git add var/cache/llm && git commit -m "LLM cache: new replies"
 The replies contain extracted drawing content (client data), so keep the repo private.
 
 ## 5. Using the UI
+
+### 5.1 Workbench (`/`)
+
+The workbench is a React app in `frontend/`, styled with the Nablon Meridian design system:
+`frontend/src/theme/meridian.css` is copied unchanged from `adani-slide-main/Nablon-Meridian-UX-Styling`,
+and `workbench.css` adds this app's components on Meridian tokens. Follow Meridian's rules when changing
+it: brand blue is the only accent, pass/live is blue (no green), amber = needs attention, red = fail,
+flat white cards. Fonts (Poppins, Inter, JetBrains Mono) load from Google Fonts. `npm run build` writes it into
+`src/substation_retrieval/api/web/`, which `sr serve` serves at `/`. The build is committed, so running the
+app needs no Node. If `api/web/` is missing, `/` falls back to the classic UI.
+
+```bash
+cd frontend
+npm install
+npm run dev        # http://localhost:5173, proxies /api to a running `sr serve` on :8077
+npm run build      # refresh api/web after UI changes
+```
+
+- **Create new.** *Step by step* asks, in plain words, where the substation sits, the equipment list
+  (count × type, kVA, dry/oil, ways), room size and height in metres, doors and civil features, and nearby
+  nalla / DP road / tree distances. It is sent as a structured query (`POST /api/search`), so only the
+  fields filled in are scored. *Describe in words* is the chat (`POST /api/chat`) with follow-ups. Each
+  result shows the verdict, score, failing checks, the original equipment layout and the historic room
+  posed on the new site.
+- **Review drawings.** `GET /api/workbench/queue` lists every drawing with its open actions, most first:
+  extraction not yet reviewed (or held at the gate), the extractor's quality issues, room length / width /
+  clear height not read, plot clearances under the norm, and items a reviewer marked wrong or unsure.
+  Opening a drawing (`GET /api/workbench/documents/{id}`) shows the page with every located field drawn
+  on it; click a field or a box to jump between them. Numbers and labels are editable (geometry is not),
+  and a missing value can be added.
+  - *Save draft* (`PATCH .../fields`) writes the edits into `var/extractions/<id>/doc.json` and logs each
+    one under `review.edits`. Nothing reaches the index yet.
+  - *Submit review* (`POST .../submit`) saves, marks the drawing reviewed and re-indexes it (graph + RAG,
+    new index version). Needs Neo4j up; if indexing fails the edits are kept and you can submit again.
+  - Correct / wrong / unsure marks and notes live in `var/review/marks/<id>.json`.
+
+### 5.2 Sign-in and roles
+
+Every page and every `/api` call except `/api/health` needs a sign-in (`api/auth.py`). The session is a
+signed HttpOnly cookie that lasts `auth.session_hours` (12 by default). `/classic` sends you to the same
+sign-in page.
+
+| Role | Can |
+| ---- | --- |
+| Viewer | browse, search, chat, open drawings in review (read only) |
+| Editor | + edit, mark and submit drawings, ingest drawings |
+| Admin  | + engines, import / rebuild, delete drawings, manage users |
+
+On first start `var/auth/users.json` is created with the VidyutMitra development accounts:
+`admin` / `Admin@123`, `draftsman` / `Editor@123`, `viewer` / `Viewer@123`. The sign-in page lists them
+until all three passwords are changed. Change them before anyone else uses the app:
+
+```bash
+sr users                                   # list accounts
+sr user-passwd admin                       # set a password (prompts)
+sr user-add asha --role editor --name "Asha K"   # new account (prompts for the password)
+sr user-remove viewer
+```
+
+Passwords are stored as scrypt hashes in the same format as VidyutMitra's `_system/users.json`, so that
+file can be copied to `var/auth/users.json`. The signing key is `var/auth/secret` (random) or
+`SR_AUTH_SECRET`. Set `auth.secure_cookie: true` when serving over HTTPS. For a single-user local run,
+`SR_AUTH_ENABLED=false` turns sign-in off and everyone is admin.
+
+### 5.3 Classic UI (`/classic`)
 
 - **Chat.** Type a requirement, for example:
   *"indoor CSS on ground floor, 2 x 1500 kVA dry DT, 1 RMU, 4 LTP, room 11 x 8 m, clear height 4.5 m, rolling shutter, nalla 4 m away"*.

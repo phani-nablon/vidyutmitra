@@ -67,6 +67,15 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("jobs")
     sub.add_parser("health")
     sub.add_parser("versions")
+    sub.add_parser("users", help="list the sign-in accounts")
+    p = sub.add_parser("user-add", help="add a sign-in account, or change its role / name")
+    p.add_argument("username")
+    p.add_argument("--role", choices=["viewer", "editor", "admin"], default=None)
+    p.add_argument("--name")
+    p = sub.add_parser("user-passwd", help="set an account's password (prompts for it)")
+    p.add_argument("username")
+    p = sub.add_parser("user-remove", help="delete a sign-in account")
+    p.add_argument("username")
     a = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO if a.verbose else logging.WARNING, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -93,6 +102,31 @@ def main(argv: list[str] | None = None) -> int:
                 print("next: sr neo4j-check, then sr import-v1 (first time), then sr serve")
             return rc
         return neo4j_server.stop(_s()) if a.cmd == "neo4j-stop" else neo4j_server.status(_s())
+    if a.cmd in ("users", "user-add", "user-passwd", "user-remove"):
+        # light path: only the account file under var/auth
+        import getpass
+        from .api.auth import store
+        from .config import settings as _s
+        st = store(_s())
+        try:
+            if a.cmd == "users":
+                for u in st.list():
+                    print(f'{u["username"]:<20} {u["role"]:<8} {u["name"]}')
+            elif a.cmd == "user-remove":
+                print("removed" if st.remove(a.username) else "no such user")
+            else:
+                pw = None
+                if a.cmd == "user-passwd" or st.get(a.username) is None:
+                    pw = getpass.getpass(f"password for {a.username}: ")
+                    if pw != getpass.getpass("again: "):
+                        print("passwords differ", file=sys.stderr)
+                        return 1
+                print(st.upsert(a.username, getattr(a, "role", None) or (None if st.get(a.username) else "viewer"),
+                                pw, getattr(a, "name", None)))
+        except ValueError as e:
+            print(e, file=sys.stderr)
+            return 1
+        return 0
     if a.cmd == "serve":
         import uvicorn
         from .config import settings

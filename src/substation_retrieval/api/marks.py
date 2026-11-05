@@ -27,7 +27,7 @@ class Marks:
         except Exception:
             return {}
 
-    def set(self, doc_id: str, item_id: str, verdict: str | None, note: str = "") -> dict:
+    def set(self, doc_id: str, item_id: str, verdict: str | None, note: str = "", by: str | None = None) -> dict:
         if verdict is not None and verdict not in VERDICTS:
             raise ValueError("verdict must be correct, wrong, unsure or empty")
         with _lock:
@@ -35,7 +35,7 @@ class Marks:
             if verdict is None and not note.strip():
                 d.pop(item_id, None)
             else:
-                d[item_id] = {"verdict": verdict, "note": note.strip(), "at": time.strftime("%Y-%m-%dT%H:%M:%S")}
+                d[item_id] = {"verdict": verdict, "note": note.strip(), "at": time.strftime("%Y-%m-%dT%H:%M:%S"), "by": by}
             self.folder.mkdir(parents=True, exist_ok=True)
             p = self._path(doc_id)
             tmp = p.with_suffix(".tmp")

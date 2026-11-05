@@ -77,7 +77,8 @@ def services(corpus, tmp_path_factory):
     var = tmp_path_factory.mktemp("var")
     s = load_settings(overrides={"paths.var_dir": str(var), "paths.v1_parsed_dir": str(corpus),
                                  "paths.data_dir": str(var / "nopdf"), "llm.provider": "none",
-                                 "graph.backend": "sqlite", "engines.rag.image_embedder": "none"})
+                                 "graph.backend": "sqlite", "engines.rag.image_embedder": "none",
+                                 "auth.enabled": False})
     sv = Services(s)
     sv.ingest.import_v1(log_fn=lambda m: None)
     yield sv

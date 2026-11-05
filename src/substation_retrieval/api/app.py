@@ -13,8 +13,8 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -25,9 +25,12 @@ from ..retrieval.overlay import overlay, substation_geometry
 from ..retrieval.query import build_query
 from ..retrieval.siteplan import analyze as analyze_siteplan
 from ..services import get_services
+from .auth import current_user, enabled as auth_enabled, guard as auth_guard, router as auth_router
+from .workbench import router as workbench_router
 
 log = logging.getLogger("substation_retrieval.api")
 STATIC = Path(__file__).with_name("static")
+WEB = Path(__file__).with_name("web")      # built workbench UI (frontend/ -> npm run build)
 SITEPLANS: dict[str, dict] = {}
 
 
@@ -72,9 +75,44 @@ app = FastAPI(title="CSS Design Retrieval", version=__version__, lifespan=lifesp
 app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
 
 
-@app.get("/", response_class=HTMLResponse)
-def index():
+app.include_router(auth_router)
+app.include_router(workbench_router)
+
+
+@app.middleware("http")
+async def _require_sign_in(request: Request, call_next):
+    """Every /api call except sign-in and health needs a session, and writes need the right role (api/auth.py)."""
+    denied = auth_guard(request)
+    return denied if denied is not None else await call_next(request)
+if (WEB / "assets").is_dir():
+    app.mount("/assets", StaticFiles(directory=str(WEB / "assets")), name="web-assets")
+if (WEB / "fonts").is_dir():   # frontend/public/fonts: drop the licensed Adani .woff2 files there and rebuild
+    app.mount("/fonts", StaticFiles(directory=str(WEB / "fonts")), name="web-fonts")
+
+
+def _classic() -> str:
     return (STATIC / "index.html").read_text(encoding="utf-8")
+
+
+@app.get("/classic", response_class=HTMLResponse)
+def classic(request: Request):
+    """The original five-tab UI (chat, library, ontology, site graph, admin). It has no sign-in screen of
+    its own, so it borrows the workbench one."""
+    if auth_enabled() and current_user(request) is None and (WEB / "index.html").exists():
+        return RedirectResponse("/login?next=/classic", status_code=303)
+    return _classic()
+
+
+# The workbench (frontend/, built into api/web) owns the client-side routes below. Without a build the
+# classic UI is served instead, so a checkout without Node still has a working front page.
+@app.get("/", response_class=HTMLResponse)
+@app.get("/login", response_class=HTMLResponse)
+@app.get("/new", response_class=HTMLResponse)
+@app.get("/review", response_class=HTMLResponse)
+@app.get("/review/{doc_id}", response_class=HTMLResponse)
+def index(doc_id: str | None = None):
+    page = WEB / "index.html"
+    return page.read_text(encoding="utf-8") if page.exists() else _classic()
 
 
 # ------------------------------------------------------------ models
