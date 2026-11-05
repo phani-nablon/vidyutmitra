@@ -28,7 +28,8 @@ ml = ["transformers>=4.40"]
 cad = ["ezdxf>=1.3"]
 anthropic = ["anthropic>=0.40"]
 dev = ["pytest>=8.0"]
-all = ["ezdxf>=1.3", "anthropic>=0.40", "pytest>=8.0"]
+rules = ["openpyxl>=3.1"]
+all = ["ezdxf>=1.3", "anthropic>=0.40", "pytest>=8.0", "openpyxl>=3.1"]
 
 [project.scripts]
 sr = "substation_retrieval.cli:main"

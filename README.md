@@ -283,7 +283,30 @@ npm run build      # refresh api/web after UI changes
     new index version). Needs Neo4j up; if indexing fails the edits are kept and you can submit again.
   - Correct / wrong / unsure marks and notes live in `var/review/marks/<id>.json`.
 
-### 5.2 Sign-in and roles
+### 5.2 Design inputs, repository and rules
+
+- **Create new → Design inputs** (the detailed design's screen C7). Pick CSS / DSS and the target stage,
+  the site type (open to sky on an open plot or RG, or part of a building with a basement or mother earth
+  below), the floor and clear height, and paste the equipment the way Network Planning sends it
+  (`1. 1.5 MVA DT – 3 nos; 2. 2+2 RMU – 1 nos`). Door mode, door positions and constraints travel with the
+  request. Mark each document of the AEML mandatory input package (T1–T9, plus D1–D3 for detailed) Yes /
+  No / NA; anything mandatory not marked Yes is carried onto the results as an open item.
+  *Read the request* (`POST /api/workbench/understand`) shows what was understood before matching.
+- **Browse repository** (`/repo`) follows the design's hierarchy: Category → Division → Project (ZLDP, or
+  developer where no number is allocated) → Stage folder → Revision. It reads the VidyutMitra
+  SubstationRepository (`_system/metadata.json` and `drawings/`) **read only**; uploads, versions and
+  approval stay with VidyutMitra. Point `repository.path` in `config/settings.yaml` (or `SR_REPO_PATH`) at
+  the SubstationRepository folder. Repository files that are also in this library get a *Fields* link to
+  the review page (matched by content hash, else by name), and a project's parsed parameters can be sent
+  to Create new with *Use as design inputs*. The page also has *Find a drawing* (B6) over the same
+  parameters.
+- **Design rules** (`/rules`, R5): browse by section, search, filter (to confirm, edited, drives a check),
+  add, edit, duplicate, delete, reset to extracted, export / import JSON, and *Load workbook* to rebuild
+  the rules from `Equip_DimensionRules.xlsx` with `scripts/build_rules.py` (needs `openpyxl`:
+  `uv pip install openpyxl`). Rules added by hand survive a reload unless you untick the option. Changes
+  need the admin role; rules tied to a check change it on save.
+
+### 5.3 Sign-in and roles
 
 Every page and every `/api` call except `/api/health` needs a sign-in (`api/auth.py`). The session is a
 signed HttpOnly cookie that lasts `auth.session_hours` (12 by default). `/classic` sends you to the same
@@ -293,7 +316,7 @@ sign-in page.
 | ---- | --- |
 | Viewer | browse, search, chat, open drawings in review (read only) |
 | Editor | + edit, mark and submit drawings, ingest drawings |
-| Admin  | + engines, import / rebuild, delete drawings, manage users |
+| Admin  | + engines, import / rebuild, delete drawings, manage users, edit / load design rules |
 
 On first start `var/auth/users.json` is created with the VidyutMitra development accounts:
 `admin` / `Admin@123`, `draftsman` / `Editor@123`, `viewer` / `Viewer@123`. The sign-in page lists them
@@ -311,7 +334,7 @@ file can be copied to `var/auth/users.json`. The signing key is `var/auth/secret
 `SR_AUTH_SECRET`. Set `auth.secure_cookie: true` when serving over HTTPS. For a single-user local run,
 `SR_AUTH_ENABLED=false` turns sign-in off and everyone is admin.
 
-### 5.3 Classic UI (`/classic`)
+### 5.4 Classic UI (`/classic`)
 
 - **Chat.** Type a requirement, for example:
   *"indoor CSS on ground floor, 2 x 1500 kVA dry DT, 1 RMU, 4 LTP, room 11 x 8 m, clear height 4.5 m, rolling shutter, nalla 4 m away"*.

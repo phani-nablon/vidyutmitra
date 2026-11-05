@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useLocation } from 'react-router-dom';
 import { api } from '../lib/api';
+import { DesignInputs, EMPTY_INPUTS, inputsToQuery, openItems, type Inputs } from '../components/DesignInputs';
 import { Alert, Badge, Card, Dropzone, Field, PageHead } from '../components/ui';
 import { CheckList, ResultCard } from '../components/ResultCard';
-import type { EquipmentRow, SearchResponse, SitePlan, StructuredQuery } from '../lib/types';
+import type { EquipmentRow, SearchResponse, SitePlan, StructuredQuery, Understood } from '../lib/types';
 
-type Mode = 'prompt' | 'builder';
+type Mode = 'inputs' | 'builder' | 'prompt';
 
 const EXAMPLES = [
   'Indoor CSS on the ground floor of a residential building, 2 x 1500 kVA dry DT, 1 RMU, 4 LTP, room 11 x 8 m, clear height 4.5 m, rolling shutter, trench to DP road',
@@ -189,7 +191,12 @@ interface Turn {
 
 /** Page 1: describe a new site (prompt or builder) and get the closest historic designs. */
 export function NewDesign() {
-  const [mode, setMode] = useState<Mode>('builder');
+  const location = useLocation();
+  const pre = (location.state as { inputs?: Partial<Inputs>; from?: string } | null) || null;
+  const [mode, setMode] = useState<Mode>('inputs');
+  const [inp, setInp] = useState<Inputs>(() => ({ ...EMPTY_INPUTS, ...(pre?.inputs || {}) }));
+  const [understood, setUnderstood] = useState<Understood | null>(null);
+  const [carried, setCarried] = useState<string[]>([]);
   const [b, setB] = useState<Builder>(EMPTY);
   const [prompt, setPrompt] = useState('');
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -224,7 +231,32 @@ export function NewDesign() {
     }
   }
 
+  // the design request: read it back first (C8), then match, carrying the open input items onto the results
+  async function readInputs() {
+    const { text, structured } = inputsToQuery(inp);
+    const u = await api.understand(text, structured);
+    setUnderstood(u);
+    return { text, structured };
+  }
+
+  async function runInputs(search: boolean) {
+    setBusy(true);
+    setError(null);
+    try {
+      const { text, structured } = await readInputs();
+      if (search) {
+        setCarried(openItems(inp));
+        setRes(await api.search(text, structured, plan?.id));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not read the request');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function runBuilder() {
+    setCarried([]);
     setBusy(true);
     setError(null);
     try {
@@ -238,6 +270,7 @@ export function NewDesign() {
 
   async function runPrompt(text = prompt) {
     if (!text.trim()) return;
+    setCarried([]);
     setBusy(true);
     setError(null);
     setTurns((t) => [...t, { role: 'user', text }]);
@@ -256,6 +289,9 @@ export function NewDesign() {
 
   function reset() {
     setB(EMPTY);
+    setInp(EMPTY_INPUTS);
+    setUnderstood(null);
+    setCarried([]);
     setTurns([]);
     setSession(null);
     setRes(null);
@@ -296,6 +332,9 @@ export function NewDesign() {
         chips={['KG match, RAG fallback', 'partial queries are fine', 'site plan optional']}
       />
       <div className="tabs">
+        <button className={`tab${mode === 'inputs' ? ' on' : ''}`} onClick={() => setMode('inputs')}>
+          Design inputs
+        </button>
         <button className={`tab${mode === 'builder' ? ' on' : ''}`} onClick={() => setMode('builder')}>
           Step by step
         </button>
@@ -305,10 +344,25 @@ export function NewDesign() {
       </div>
 
       {error && <Alert tone="error">{error}</Alert>}
+      {pre?.from && mode === 'inputs' && (
+        <Alert tone="info">Design inputs taken from the repository project {pre.from}. Check them, then find matching designs.</Alert>
+      )}
 
       <div className="split">
         <div className="stack">
-          {mode === 'builder' ? (
+          {mode === 'inputs' ? (
+            <Card title="Design inputs" caption="C7 · input package, site type, text request" action={<button className="btn ghost sm" onClick={reset}>Start over</button>}>
+              <DesignInputs value={inp} onChange={(v) => { setInp(v); setUnderstood(null); }} understood={understood} />
+              <div className="row" style={{ marginTop: 14 }}>
+                <button className="btn" disabled={busy || !inp.request.trim()} onClick={() => runInputs(false)}>
+                  Read the request
+                </button>
+                <button className="btn primary grow" disabled={busy || (!inp.request.trim() && !inp.siteType && !plan)} onClick={() => runInputs(true)}>
+                  {busy ? 'Working…' : 'Find matching designs'}
+                </button>
+              </div>
+            </Card>
+          ) : mode === 'builder' ? (
             <Card title="Query builder" action={<button className="btn ghost sm" onClick={reset}>Start over</button>}>
               <Section n={1} title="Where will it sit?">
                 <Field label="Installation">
@@ -543,6 +597,16 @@ export function NewDesign() {
                   </div>
                 )}
                 <CheckList checks={res.feasibility} />
+                {carried.length > 0 && (
+                  <div className="carried">
+                    <span className="lbl">Open items from the input package</span>
+                    <ul>
+                      {carried.map((c) => (
+                        <li key={c}>{c}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
               {res.results.length === 0 && (
                 <Alert tone="warn">No historic design matched. Add the installation, floor, equipment or room size.</Alert>

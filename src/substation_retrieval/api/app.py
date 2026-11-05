@@ -26,6 +26,8 @@ from ..retrieval.query import build_query
 from ..retrieval.siteplan import analyze as analyze_siteplan
 from ..services import get_services
 from .auth import current_user, enabled as auth_enabled, guard as auth_guard, router as auth_router
+from .repository import router as repo_router
+from .rules_api import router as rules_router
 from .workbench import router as workbench_router
 
 log = logging.getLogger("substation_retrieval.api")
@@ -77,6 +79,8 @@ app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
 
 app.include_router(auth_router)
 app.include_router(workbench_router)
+app.include_router(repo_router)
+app.include_router(rules_router)
 
 
 @app.middleware("http")
@@ -110,7 +114,10 @@ def classic(request: Request):
 @app.get("/new", response_class=HTMLResponse)
 @app.get("/review", response_class=HTMLResponse)
 @app.get("/review/{doc_id}", response_class=HTMLResponse)
-def index(doc_id: str | None = None):
+@app.get("/rules", response_class=HTMLResponse)
+@app.get("/repo", response_class=HTMLResponse)
+@app.get("/repo/{rest:path}", response_class=HTMLResponse)
+def index(doc_id: str | None = None, rest: str | None = None):
     page = WEB / "index.html"
     return page.read_text(encoding="utf-8") if page.exists() else _classic()
 

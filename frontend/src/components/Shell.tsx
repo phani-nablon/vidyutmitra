@@ -25,6 +25,17 @@ const I = {
       <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 8h10M7 12h6" />
     </svg>
   ),
+  repo: (
+    <svg viewBox="0 0 24 24">
+      <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+    </svg>
+  ),
+  rules: (
+    <svg viewBox="0 0 24 24">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+      <path d="m9 12 2 2 4-4" />
+    </svg>
+  ),
   classic: (
     <svg viewBox="0 0 24 24">
       <rect x="3" y="4" width="18" height="16" rx="2" />
@@ -34,6 +45,10 @@ const I = {
 };
 
 function crumb(path: string): string {
+  if (path.startsWith('/repo/p/')) return 'SLIDe / Repository / Project record';
+  if (path.startsWith('/repo/')) return `SLIDe / Repository / ${path.split('/').slice(2).map(decodeURIComponent).join(' / ')}`;
+  if (path.startsWith('/repo')) return 'SLIDe / Repository';
+  if (path.startsWith('/rules')) return 'SLIDe / Rules / Design rules';
   if (path.startsWith('/new')) return 'SLIDe / Design / Create new';
   if (path.startsWith('/review/')) return 'SLIDe / Library / Review drawings / Drawing';
   if (path.startsWith('/review')) return 'SLIDe / Library / Review drawings';
@@ -82,6 +97,10 @@ export function Shell() {
           <Nl to="/" end icon={I.home}>
             Home
           </Nl>
+          <div className="navhead">Repository</div>
+          <Nl to="/repo" icon={I.repo}>
+            Browse repository
+          </Nl>
           <div className="navhead">Design</div>
           <Nl to="/new" icon={I.create}>
             Create new
@@ -89,6 +108,10 @@ export function Shell() {
           <div className="navhead">Library</div>
           <Nl to="/review" icon={I.review} mark={pending > 0}>
             Review drawings
+          </Nl>
+          <div className="navhead">Rules</div>
+          <Nl to="/rules" icon={I.rules}>
+            Design rules
           </Nl>
           <div className="navhead">Tools</div>
           <a className="nlink" href="/classic">

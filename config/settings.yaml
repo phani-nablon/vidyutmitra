@@ -21,6 +21,12 @@ auth:
   # accounts: var/auth/users.json (created with the dev accounts on first start; manage with sr users / sr user-add)
   # signing key: var/auth/secret (random), or SR_AUTH_SECRET
 
+repository:
+  # SR_REPO_PATH  the VidyutMitra SubstationRepository folder (holds drawings/ and _system/metadata.json),
+  # read only, for the Repository pages. Empty = VidyutMitra's default under your home folder:
+  #   ~/Adani/AEML _ExternalShare - VidyutMitra project/CSS_DSS Drawings for Automation/SubstationRepository
+  path: null
+
 llm:
   provider: openai             # SR_LLM_PROVIDER  openai | anthropic | none
   model: gpt-6-astra           # SR_LLM_MODEL (model id)

@@ -5,6 +5,15 @@ import type {
   Mark,
   User,
   QueueRow,
+  RepoCategory,
+  RepoDivision,
+  RepoDrawing,
+  RepoParams,
+  RepoProject,
+  RepoStage,
+  Rule,
+  RuleBook,
+  Understood,
   ReviewDoc,
   SearchResponse,
   SitePlan,
@@ -72,6 +81,38 @@ export const api = {
     return request<SitePlan>('/siteplan', { method: 'POST', body: form });
   },
 
+  understand: (text: string, structured: StructuredQuery | null) =>
+    request<Understood>('/workbench/understand', { method: 'POST', body: json({ text, structured }) }),
+
+  // ---- repository (classic browse)
+  repoStatus: () => request<{ configured: boolean; path: string; message?: string; projects?: number; drawings?: number }>('/repo/status'),
+  repoCategories: () => request<RepoCategory[]>('/repo/categories'),
+  repoDivisions: (category: string) =>
+    request<{ category: RepoCategory; divisions: RepoDivision[] }>(`/repo/${encodeURIComponent(category)}/divisions`),
+  repoProjects: (category: string, division: string, q = '') =>
+    request<{ category: RepoCategory; division: { slug: string; name: string }; projects: RepoProject[] }>(
+      `/repo/${encodeURIComponent(category)}/${encodeURIComponent(division)}/projects${q ? `?q=${encodeURIComponent(q)}` : ''}`
+    ),
+  repoProject: (id: string) =>
+    request<{ project: RepoProject; stages: RepoStage[]; parameters: RepoParams | null }>(`/repo/projects/${encodeURIComponent(id)}`),
+  repoSearch: (f: Record<string, string>) => {
+    const qs = new URLSearchParams(Object.entries(f).filter(([, v]) => v !== '')).toString();
+    return request<RepoDrawing[]>(`/repo/search${qs ? `?${qs}` : ''}`);
+  },
+
+  // ---- design rules
+  rules: () => request<RuleBook>('/rules'),
+  addRule: (r: Partial<Rule>) => request<Rule>('/rules', { method: 'POST', body: json(r) }),
+  updateRule: (id: string, r: Partial<Rule>) => request<Rule>(`/rules/${encodeURIComponent(id)}`, { method: 'PUT', body: json(r) }),
+  deleteRule: (id: string) => request<{ ok: boolean }>(`/rules/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  resetRules: () => request<{ ok: boolean }>('/rules/reset', { method: 'POST' }),
+  importRules: (file: File, keepUser: boolean, workbook: boolean) => {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('keep_user', String(keepUser));
+    return request<{ sections: number; rules: number }>(workbook ? '/rules/load-workbook' : '/rules/import', { method: 'POST', body: form });
+  },
+
   // ---- page 2: review
   queue: () => request<{ documents: QueueRow[]; total_open: number }>('/workbench/queue'),
   review: (docId: string) => request<ReviewDoc>(`/workbench/documents/${encodeURIComponent(docId)}`),
@@ -93,6 +134,10 @@ export const api = {
 };
 
 /** Image URLs served by the backend (page renders, layout crops). */
+export const repoFile = (drawingId: string, download = false) =>
+  `/api/repo/files/${encodeURIComponent(drawingId)}${download ? '?download=true' : ''}`;
+export const RULES_EXPORT_URL = '/api/rules/export';
+
 export const img = {
   page: (docId: string, page = 1) => `/api/documents/${encodeURIComponent(docId)}/page/${page}.jpg`,
   layout: (docId: string, layoutId: string) =>

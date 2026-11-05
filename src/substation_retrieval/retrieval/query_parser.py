@@ -25,6 +25,31 @@ EQUIP_PATTERNS = [
 ]
 
 
+# Network Planning sends equipment as a numbered list: "1. 1.5 MVA DT – 3 nos; 2. 2+2 RMU – 1 nos".
+# The quantity sits after a dash at the end of each item; the generic parser would read the list numbers
+# ("2.", "3.") as counts and miss the MVA rating, so list-shaped text is split per item first.
+_NP_QTY = re.compile(r"^\s*(?:\d{1,2}\s*[.)]\s*)?(.+?)\s*-\s*(\d+)\s*(?:nos?\.?|no\.?|numbers?|units?|sets?)?\s*[.,]?\s*$", re.I)
+
+
+def parse_np_list(text):
+    t = (text or "").replace("\u2013", "-").replace("\u2014", "-").lower()
+    segs = re.split(r"[\n;]+|\s(?=\d{1,2}[.)]\s)", t)
+    items = []
+    for seg in segs:
+        m = _NP_QTY.match(seg)
+        if not m:
+            continue
+        spec = re.sub(r"(\d+(?:\.\d+)?)\s*mva\b", lambda x: f"{int(round(float(x.group(1)) * 1000))} kva", m.group(1))
+        spec = re.sub(r"(\d)([a-z])", r"\1 \2", spec)          # "2+2RMU" -> "2+2 rmu": the patterns need a word boundary
+        spec = re.sub(r"(\d)\s+(\+)\s*", r"\1\2", spec)
+        found = parse_equipment(spec)
+        if not found:
+            continue
+        it = dict(found[0], count=int(m.group(2)), text=m.group(1).strip())
+        items.append(it)
+    return items
+
+
 def _n(s):
     s = s.lower()
     return int(s) if s.isdigit() else WORDNUM.get(s)
@@ -217,7 +242,7 @@ def parse(text):
         q["locality"] = loc[0]
 
     # ---- equipment
-    items = parse_equipment(text)
+    items = parse_np_list(text) or parse_equipment(text)
     if items:
         q["equipment_items"] = items
     return _finalise(q)

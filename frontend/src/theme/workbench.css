@@ -203,3 +203,67 @@ fieldset.item-body:disabled .mark-btn { cursor: not-allowed; opacity: .6; }
 .login-body .hl b { color: var(--ink); font-weight: 700; }
 .login-dev { border-top: 1px solid var(--line2); padding: 14px 18px 8px; background: var(--card2); }
 .login-dev .tbl td { background: transparent; padding: 7px 4px; }
+
+/* ------------------------------------------------------------ design inputs (C7) */
+.lbl { font-family: var(--mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 1.1px; color: var(--muted); font-weight: 600; }
+.pkg { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--r-sm); overflow: hidden; }
+.pkg-row { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-bottom: 1px solid var(--line2); background: #fff; }
+.pkg-row:last-child { border-bottom: 0; }
+.pkg-row.na { background: var(--card2); }
+.pkg-row.na .name { color: var(--muted); }
+.pkg-id { font-size: 11px; font-weight: 700; color: var(--brand-ink); width: 24px; flex: none; }
+.pkg-row .name { font-weight: 600; color: var(--ink); font-size: 12.5px; }
+.yn { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; flex: none; }
+.yn-b { border: 0; background: #fff; font: 600 11px var(--disp); color: var(--body); padding: 6px 10px; cursor: pointer; border-right: 1px solid var(--line); }
+.yn-b:last-child { border-right: 0; }
+.yn-b.yes.on { background: var(--brand); color: #fff; }
+.yn-b.no.on { background: var(--amber); color: #fff; }
+.yn-b.na.on { background: var(--slate); color: #fff; }
+.openitems { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.understood-box { border: 1px solid var(--line); border-left: 3px solid var(--violet); border-radius: var(--r-sm); padding: 12px 14px; background: var(--card2); }
+.carried { margin-top: 12px; border-left: 3px solid var(--amber); padding: 6px 0 4px 12px; }
+.carried ul { margin: 6px 0 0 16px; font-size: 12px; color: var(--amber-ink); }
+
+/* ------------------------------------------------------------ repository */
+.repo-crumbs { font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin: 0 2px 12px; display: flex; flex-wrap: wrap; gap: 6px; }
+.repo-crumbs .sep { margin-right: 6px; color: var(--faint); }
+.repo-crumbs b { color: var(--ink); font-weight: 600; }
+.filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+.divgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 13px; }
+.divcard { color: inherit; transition: .18s; }
+.divcard:hover { transform: translateY(-2px); box-shadow: var(--sh-lift); }
+.divcard .cbody { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.divcard h3 { font-size: 15px; }
+.stagechips { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.stagechip { font-family: var(--mono); font-size: 9.5px; font-weight: 700; padding: 3px 7px; border-radius: 6px; background: var(--card2); color: var(--faint); border: 1px dashed var(--line); }
+.stagechip.on { background: rgba(37,99,235,.1); color: var(--brand-ink); border: 1px solid transparent; }
+.tabn { font-family: var(--mono); font-size: 10px; opacity: .7; margin-left: 4px; }
+.split-r { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(300px, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 1000px) { .split-r { grid-template-columns: 1fr; } }
+.revs { display: flex; flex-direction: column; gap: 8px; }
+.rev { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line2); border-radius: var(--r-sm); flex-wrap: wrap; }
+.rev.cur { border-color: rgba(37,99,235,.35); background: rgba(37,99,235,.04); }
+.vbadge { font-family: var(--mono); font-weight: 700; font-size: 12px; color: var(--ink); background: var(--card); border-radius: 8px; padding: 5px 8px; flex: none; }
+.eqlist { list-style: none; display: flex; flex-direction: column; gap: 5px; margin-top: 6px; font-size: 12.5px; }
+
+/* ------------------------------------------------------------ rules */
+.rules-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.rules-layout { display: grid; grid-template-columns: 250px minmax(0, 1fr) 340px; gap: 14px; align-items: start; }
+@media (max-width: 1250px) { .rules-layout { grid-template-columns: 220px minmax(0, 1fr); } .rules-detail { grid-column: 1 / -1; } }
+@media (max-width: 800px) { .rules-layout { grid-template-columns: 1fr; } }
+.rules-nav { display: flex; flex-direction: column; padding: 6px; position: sticky; top: 70px; }
+.rsec { display: flex; justify-content: space-between; gap: 8px; text-align: left; border: 0; background: none; font: 600 12px var(--disp); color: var(--body); padding: 9px 10px; border-radius: 9px; cursor: pointer; }
+.rsec:hover { background: var(--card); }
+.rsec.on { background: var(--brand); color: #fff; }
+.rsec.dim { opacity: .45; }
+.rsec .mono { font-size: 10.5px; }
+.rgroup { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); font-weight: 700; padding: 12px 14px 4px; }
+.rtbl tr.sel td { background: rgba(37,99,235,.07); }
+.rtbl .num { text-align: right; }
+.rules-detail { position: sticky; top: 70px; }
+.bigval { font-family: var(--mono); font-size: 24px; font-weight: 700; color: var(--ink); }
+.bigval small { font-size: 13px; color: var(--muted); font-weight: 500; }
+.btn.danger { color: var(--red-ink); }
+.modal-back { position: fixed; inset: 0; background: rgba(15,27,45,.35); display: grid; place-items: center; z-index: 100; padding: 20px; }
+.modal { width: 100%; max-width: 640px; max-height: calc(100vh - 40px); overflow: auto; box-shadow: var(--sh-lift); }
+.num { text-align: right; }

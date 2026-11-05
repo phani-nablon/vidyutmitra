@@ -14,7 +14,7 @@ and crops load through <img src>, which cannot carry a header.
 Roles
   viewer   read everything, run searches and chat
   editor   + edit, mark and submit drawings in review, ingest drawings
-  admin    + engines, rebuild / import, delete drawings, manage users
+  admin    + engines, rebuild / import, delete drawings, manage users, edit / load design rules
 """
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ LOCAL_USER = {"username": "local", "name": "Local user", "role": "admin"}
 # Requests anyone may make without a session.
 PUBLIC = {"/api/auth/login", "/api/auth/logout", "/api/auth/me", "/api/auth/mode", "/api/health"}
 # Writes a viewer may still make: searching is a POST but changes nothing.
-VIEWER_POSTS = {"/api/search", "/api/chat", "/api/siteplan"}
+VIEWER_POSTS = {"/api/search", "/api/chat", "/api/siteplan", "/api/workbench/understand"}
 
 
 # ------------------------------------------------------------ passwords
@@ -210,7 +210,8 @@ def required_role(method: str, path: str) -> str | None:
     """Minimum role for an API call; None = public."""
     if path in PUBLIC:
         return None
-    if path.startswith(("/api/admin", "/api/auth/users")) or method == "DELETE" or (path == "/api/engines" and method != "GET"):
+    if path.startswith(("/api/admin", "/api/auth/users")) or method == "DELETE" or (path == "/api/engines" and method != "GET") \
+            or (path.startswith("/api/rules") and method not in ("GET", "HEAD")):
         return "admin"
     if method in ("GET", "HEAD") or path in VIEWER_POSTS:
         return "viewer"

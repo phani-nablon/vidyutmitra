@@ -40,6 +40,7 @@ ENV_MAP = {
     "SR_HOST": "server.host",
     "SR_PORT": "server.port",
     "SR_AUTH_ENABLED": "auth.enabled",
+    "SR_REPO_PATH": "repository.path",
 }
 
 

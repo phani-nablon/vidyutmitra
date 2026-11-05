@@ -203,3 +203,109 @@ export interface User {
   name: string;
   role: Role;
 }
+
+// ---- repository (VidyutMitra SubstationRepository, read only)
+export interface RepoCategory {
+  key: 'css' | 'dss';
+  label: string;
+  long: string;
+  divisions: number;
+  projects: number;
+  drawings: number;
+}
+export interface RepoDivision {
+  slug: string;
+  name: string;
+  projects: number;
+  unassigned: number;
+  drawings: number;
+}
+export interface RepoProject {
+  id: string;
+  category: string;
+  division: string;
+  zldp: string | null;
+  zldp_status: 'allocated' | 'unassigned';
+  developer: string;
+  site?: string | null;
+  folder: string;
+  stages: Record<string, number>;
+  drawings: number;
+  last_activity?: string | null;
+  division_name?: string;
+}
+export interface RepoParams {
+  construction?: string | null;
+  placement?: string | null;
+  placement_sub?: string | null;
+  floor?: string | null;
+  length_m?: number | null;
+  width_m?: number | null;
+  area_sqm?: number | null;
+  clear_height_mm?: number | null;
+  drawing_no?: string | null;
+  revision?: string | null;
+  engine?: string | null;
+  equipment: Array<{ label: string; category: string; rating?: string | null; quantity?: number | null; provisional: boolean }>;
+  from?: string;
+  stage?: string;
+}
+export interface RepoDrawing {
+  id: string;
+  stage: string;
+  version: number;
+  filename: string;
+  original_name?: string;
+  size?: number;
+  uploaded_by?: string;
+  uploaded_at?: string;
+  kind?: string;
+  note?: string;
+  current: boolean;
+  doc_id: string | null;
+  on_disk: boolean;
+  params: RepoParams | null;
+  project?: RepoProject;
+}
+export interface RepoStage {
+  key: string;
+  code: string;
+  label: string;
+  about: string;
+  revisions: RepoDrawing[];
+}
+
+// ---- design rules
+export interface RuleSection {
+  id: string;
+  title: string;
+  about?: string;
+}
+export interface Rule {
+  id: string;
+  section: string;
+  group?: string | null;
+  title: string;
+  text?: string | null;
+  value?: string | number | null;
+  unit?: string | null;
+  values?: Record<string, string | number> | null;
+  applies_to?: string | null;
+  source?: string | null;
+  reference?: string | null;
+  ref_status?: string | null;
+  rule_no?: string | null;
+  enforce?: string | null;
+  origin?: 'seed' | 'edited' | 'user' | string;
+}
+export interface RuleBook {
+  sections: RuleSection[];
+  rules: Rule[];
+  edited: boolean;
+}
+
+export interface Understood {
+  asked: string[];
+  equipment: Array<{ type: string; count: number; kva?: number | null; ways?: number | null; subtype?: string | null; dt_kind?: string | null; text?: string }>;
+  fields: Record<string, unknown>;
+}

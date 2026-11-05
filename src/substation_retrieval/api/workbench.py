@@ -258,6 +258,22 @@ def edit_fields(doc_id: str, body: EditsIn, request: Request):
     return {"doc_id": doc_id, "changed": log}
 
 
+class UnderstandIn(BaseModel):
+    text: str = ""
+    structured: Optional[dict[str, Any]] = None
+
+
+@router.post("/understand")
+def understand(body: UnderstandIn):
+    """Read a design request without searching: what the parser took from the text and the selections,
+    so the person confirms it before matching (design doc, C8: confirm before anything else happens)."""
+    from ..retrieval.query import build_query, describe
+    q = build_query(body.text, body.structured)
+    items = [{k: it.get(k) for k in ("type", "count", "kva", "ways", "subtype", "dt_kind", "text")} for it in q.get("equipment_items") or []]
+    return {"asked": describe(q), "equipment": items,
+            "fields": {k: v for k, v in q.items() if not k.startswith("_") and k not in ("text", "equipment_items")}}
+
+
 class SubmitIn(BaseModel):
     edits: list[EditIn] = []
     by: Optional[str] = None
