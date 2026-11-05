@@ -140,11 +140,15 @@ class Extractor:
         from .adapters.pdf import PdfDocument
         pdf = PdfDocument(path)
         try:
-            if not self.llm.available:
-                progress("text-only (no LLM key)", 0.2)
-                doc = self._text_only(pdf, path, sha, doc_id)
+            if self.llm.available or self.llm.cached(sha):
+                try:
+                    doc = self._llm(pdf, path, sha, doc_id, art, progress)     # no key: replays var/cache/llm
+                except LLMUnavailable:
+                    progress("text-only (no LLM key, cache incomplete)", 0.2)
+                    doc = self._text_only(pdf, path, sha, doc_id)
             else:
-                doc = self._llm(pdf, path, sha, doc_id, art, progress)
+                progress("text-only (no LLM key, not cached)", 0.2)
+                doc = self._text_only(pdf, path, sha, doc_id)
         finally:
             pdf.close()
         progress("validating", 0.9)

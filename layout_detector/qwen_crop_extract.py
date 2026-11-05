@@ -19,9 +19,9 @@ Setup
     pip install ollama pydantic opencv-python-headless numpy
 
 Usage
-    python qwen_crop_extract.py ^
-        --crops "C:\\Users\\ibpha\\work\\projects\\substation\\data\\all_data\\css\\pdf\\out\\blocks_crops" ^
-        --out "C:\\Users\\ibpha\\work\\projects\\substation\\data\\all_data\\css\\pdf\\out\\crop_text" ^
+    python qwen_crop_extract.py \
+        --crops "$DATA/css/pdf/out/blocks_crops" \
+        --out "$DATA/css/pdf/out/crop_text" \
         --model qwen3-vl:8b --tiles 2
 
 Outputs (under --out)

@@ -1,8 +1,8 @@
 """Augment the TRAIN split of a YOLO dataset, offline. Val and test are copied unchanged.
 
-    python augment_yolo.py --src "C:\\...\\pdf\\out\\bboxes\\yolo_dataset_2class" ^
-                           --dst "C:\\...\\pdf\\out\\bboxes\\yolo_dataset_2class_aug" ^
-                           --yaml-root "C:\\...\\pdf\\out\\bboxes\\yolo_dataset_2class_aug"
+    python augment_yolo.py --src "$DATA/css/pdf/out/bboxes/yolo_dataset_2class" \
+                           --dst "$DATA/css/pdf/out/bboxes/yolo_dataset_2class_aug" \
+                           --yaml-root "$DATA/css/pdf/out/bboxes/yolo_dataset_2class_aug"
 
 Default operations, applied to every train sheet (each one gives one new image; the original is kept):
     rot90     rotate 90 degrees clockwise

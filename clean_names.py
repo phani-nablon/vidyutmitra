@@ -1,10 +1,13 @@
 
 import os
+import sys
 import re
 from pathlib import Path
 
 # Change this to your target folder
-folder = Path(r"C:\Users\ibpha\work\projects\substation\data\all_data\Updated Drawings\Vidyut Mitra_CSS Drawings for Automation\all_docs")
+if len(sys.argv) < 2:
+    sys.exit("usage: python clean_names.py <folder>")
+folder = Path(sys.argv[1])
 
 for file in folder.iterdir():
     if not file.is_file():

@@ -133,8 +133,29 @@ def _download(url: str, dest: Path, log) -> None:
     tmp.replace(dest)
 
 
-def _password(settings) -> str:
-    return settings.secret("SR_NEO4J_PASSWORD") or str(settings.get("graph.neo4j_password", ""))
+def password(settings, create: bool = True) -> str:
+    """SR_NEO4J_PASSWORD (env / .env) > graph.neo4j_password (settings) > var/neo4j/.password.
+    Nothing is hard-coded: on first use a random password is generated into var/neo4j/.password (gitignored, 0600)."""
+    pw = settings.secret("SR_NEO4J_PASSWORD") or str(settings.get("graph.neo4j_password") or "")
+    if pw:
+        return pw
+    f = settings.var("neo4j", mkdir=False) / ".password"
+    if f.exists():
+        return f.read_text(encoding="utf-8").strip()
+    if not create:
+        return ""
+    import secrets
+    f.parent.mkdir(parents=True, exist_ok=True)
+    pw = secrets.token_urlsafe(18)
+    f.write_text(pw + "\n", encoding="utf-8")
+    try:
+        os.chmod(f, 0o600)
+    except OSError:
+        pass
+    return pw
+
+
+_password = password
 
 
 def _env(java: str, home: Path) -> dict:

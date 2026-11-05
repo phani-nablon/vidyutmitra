@@ -1,0 +1,1 @@
+{"model": "gpt-6-astra", "output": {"substation_polygons": [], "features": [{"cls": "trench", "label": "HT CABLE TRENCH", "polygon": null, "polyline": [[796, 1000], [800, 670], [882, 787], [1000, 694]], "width_m": null}], "dimensions": [], "stated_distances": []}}

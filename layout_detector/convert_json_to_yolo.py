@@ -3,9 +3,9 @@
 Reads only the per-sheet JSON files and the sheet images. No network, no model, no Ultralytics.
 The standard library is enough; OpenCV is needed only if you use --max-side.
 
-    python convert_json_to_yolo.py --json "C:\\Users\\ibpha\\work\\projects\\substation\\data\\all_data\\css\\pdf\\out\\bboxes\\json" ^
-                                   --images "C:\\Users\\ibpha\\work\\projects\\substation\\data\\all_data\\css\\pdf\\out" ^
-                                   --dataset "C:\\Users\\ibpha\\work\\projects\\substation\\data\\all_data\\css\\pdf\\out\\bboxes\\yolo_dataset" ^
+    python convert_json_to_yolo.py --json "$DATA/css/pdf/out/bboxes/json" \
+                                   --images "$DATA/css/pdf/out" \
+                                   --dataset "$DATA/css/pdf/out/bboxes/yolo_dataset" \
                                    --mode coarse --val-frac 0.15 --test-frac 0.15 --overwrite
 
 Writes, under --dataset

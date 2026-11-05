@@ -1,7 +1,7 @@
 """Settings: config/settings.yaml + .env + environment overrides.
 
 Secrets are only read from the environment or a .env file (searched upwards from the repo root,
-e.g. C:\\Users\\ibpha\\work\\projects\\.env). They are never logged or returned by the API.
+e.g. ~/work/projects/.env). They are never logged or returned by the API.
 """
 from __future__ import annotations
 

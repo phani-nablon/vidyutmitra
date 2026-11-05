@@ -20,10 +20,10 @@ Setup
     pip install ollama opencv-python-headless numpy
 
 Usage
-    python equipment_block_extract.py ^
-        --json "C:\\Users\\ibpha\\work\\projects\\substation\\data\\all_data\\css\\pdf\\out\\bboxes\\json" ^
-        --images "C:\\Users\\ibpha\\work\\projects\\substation\\data\\all_data\\css\\pdf\\out" ^
-        --out "C:\\Users\\ibpha\\work\\projects\\substation\\data\\all_data\\css\\pdf\\out\\blocks_qwen" ^
+    python equipment_block_extract.py \
+        --json "$DATA/css/pdf/out/bboxes/json" \
+        --images "$DATA/css/pdf/out" \
+        --out "$DATA/css/pdf/out/blocks_qwen" \
         --model qwen3-vl:8b --limit 3
 
 Notes

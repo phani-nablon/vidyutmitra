@@ -49,7 +49,8 @@ graph:
   backend: neo4j               # SR_GRAPH_BACKEND neo4j | sqlite (sqlite = tests / offline only)
   neo4j_uri: bolt://localhost:7687   # SR_NEO4J_URI (neo4j+s://... for Aura)
   neo4j_user: neo4j            # SR_NEO4J_USER
-  neo4j_password: substation-local   # SR_NEO4J_PASSWORD; only guards the local server (bound to 127.0.0.1), change for shared servers
+  neo4j_password: null         # never commit a password: set SR_NEO4J_PASSWORD in .env, or leave empty and
+                               # `sr neo4j-start` generates one into var/neo4j/.password
   neo4j_database: neo4j
   ensure_schema: true          # create the vid-unique constraint and the pk index on start-up
   fallback_sqlite: false       # if Neo4j is down: false = KG engine unavailable (auto mode uses RAG)

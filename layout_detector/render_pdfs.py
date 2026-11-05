@@ -1,8 +1,8 @@
 """Render the first page of every PDF in a folder to a JPG. All JPGs go into one output folder.
 
     pip install pymupdf
-    python render_pdfs.py --src "C:\\Users\\ibpha\\work\\projects\\substation\\data\\all_data\\css\\pdf" ^
-                          --out "C:\\Users\\ibpha\\work\\projects\\substation\\data\\all_data\\css\\images" --dpi 300
+    python render_pdfs.py --src "$DATA/css/pdf" \
+                          --out "$DATA/css/images" --dpi 300
 
 Output (flat, one folder):
     <out>/<pdf name without extension>.jpg      e.g. Trustworth Realtors CSS Layout.pdf -> Trustworth Realtors CSS Layout.jpg

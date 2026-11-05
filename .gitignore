@@ -1,5 +1,9 @@
 # runtime workspace (indexes, graph db, jobs, masks, crops, debug overlays, LLM cache)
-var/
+var/*
+!var/cache/
+var/cache/*
+!var/cache/llm/
+# var/cache/llm/ IS committed: replayed LLM replies, so extraction runs without a key or cost
 *.sqlite
 *.sqlite-journal
 *.sqlite-wal

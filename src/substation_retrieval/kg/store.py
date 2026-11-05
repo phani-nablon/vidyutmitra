@@ -27,6 +27,11 @@ from pathlib import Path
 from typing import Protocol
 
 
+
+def _neo4j_password(settings) -> str:
+    from ..neo4j_server import password
+    return password(settings)
+
 class GraphStore(Protocol):
     name: str
 
@@ -468,7 +473,7 @@ class Neo4jProxy:
             st = None
             try:
                 st = Neo4jGraphStore(self.uri, self.settings.get("graph.neo4j_user", "neo4j"),
-                                     self.settings.secret("SR_NEO4J_PASSWORD") or self.settings.get("graph.neo4j_password", ""),
+                                     _neo4j_password(self.settings),
                                      self.settings.get("graph.neo4j_database", "neo4j"),
                                      float(self.settings.get("engines.kg.timeout_s", 5.0)))
                 st.driver.verify_connectivity()

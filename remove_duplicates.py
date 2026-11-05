@@ -1,12 +1,15 @@
 
 import os
+import sys
 import hashlib
 import shutil
 from pathlib import Path
 from collections import defaultdict
 
 # Main folder
-folder = Path(r"C:\Users\ibpha\work\projects\substation\data\all_data\Updated Drawings\Vidyut Mitra_CSS Drawings for Automation\all_docs")
+if len(sys.argv) < 2:
+    sys.exit("usage: python remove_duplicates.py <folder>")
+folder = Path(sys.argv[1])
 
 # Folder for duplicate files
 extra_folder = folder / "Extra"
@@ -80,13 +83,16 @@ print(f"Duplicate files moved: {duplicate_count}")
 print(f"Extra folder: {extra_folder}")
 
 import os
+import sys
 import hashlib
 import shutil
 from pathlib import Path
 from collections import defaultdict
 
 # Main folder
-folder = Path(r"C:\Users\ibpha\work\projects\substation\data\all_data\Updated Drawings\Vidyut Mitra_CSS Drawings for Automation\all_docs")
+if len(sys.argv) < 2:
+    sys.exit("usage: python remove_duplicates.py <folder>")
+folder = Path(sys.argv[1])
 
 
 # Folder for duplicate files

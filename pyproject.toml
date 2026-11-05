@@ -48,5 +48,5 @@ testpaths = ["tests"]
 addopts = "-q"
 pythonpath = ["src"]
 
-[tool.uv]
-dev-dependencies = ["pytest>=8.0"]
+[dependency-groups]
+dev = ["pytest>=8.0"]

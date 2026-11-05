@@ -1,0 +1,1 @@
+{"model": "gpt-6-astra", "output": {"substation_polygons": [], "features": [{"cls": "structure", "label": "TCS\nBUILDING\nLine", "polygon": null, "polyline": [[506, 998], [1000, 996]], "width_m": null}], "dimensions": [], "stated_distances": []}}

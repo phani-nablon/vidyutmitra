@@ -66,6 +66,10 @@ class LLMClient:
             return bool(self.s.secret("ANTHROPIC_API_KEY", "CLAUDE_API_KEY", "claude_api_key", "anthropic_api_key"))
         return bool(self.s.secret(*OPENAI_KEYS))
 
+    def cached(self, sha: str) -> bool:
+        """True if the on-disk cache holds replies for this document (cache keys start with its sha256)."""
+        return bool(self.cache_dir and sha and self.cache_dir.is_dir() and any(self.cache_dir.glob(f"{sha}_*.json")))
+
     def describe(self) -> dict:
         return {"provider": self.provider, "model": self.model if self.provider != "anthropic" else self.s.get("llm.anthropic_model"),
                 "available": self.available, "api_style": self.style}

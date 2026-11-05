@@ -1,6 +1,6 @@
 """Check the JSON files written by qwen_crop_extract.py.
 
-    python check_crop_outputs.py --out "C:\\...\\pdf\\out\\crop_text" --crops "C:\\...\\pdf\\out\\blocks_crops"
+    python check_crop_outputs.py --out "$DATA/css/pdf/out/crop_text" --crops "$DATA/css/pdf/out/blocks_crops"
 
 For every crop it reports:
     - whether a JSON file exists and parses

@@ -1,10 +1,10 @@
 """Ask Astra for every named drawing panel (layout) on each CSS sheet, with its bounding box.
 
     pip install openai numpy opencv-python-headless
-    set ASTRA_API_KEY=...            (or OPENAI_API_KEY)
-    set ASTRA_BASE_URL=...           (only if your gateway needs a base URL)
-    python extract_layouts.py --src "C:\\Users\\ibpha\\work\\projects\\substation\\data\\all_data\\css\\pdf\\out" ^
-                              --out "C:\\Users\\ibpha\\work\\projects\\substation\\data\\all_data\\css\\layouts_astra" --limit 3
+    export ASTRA_API_KEY=...            (or OPENAI_API_KEY)
+    export ASTRA_BASE_URL=...           (only if your gateway needs a base URL)
+    python extract_layouts.py --src "$DATA/css/pdf/out" \
+                              --out "$DATA/css/layouts_astra" --limit 3
 
 Per sheet
   1. Orientation call on a small copy: how far the sheet must turn clockwise so its text reads upright.

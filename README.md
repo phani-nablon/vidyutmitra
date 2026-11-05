@@ -28,73 +28,181 @@ The parts:
   - Site graph (design tree / network + site summary + masks over the original drawing)
   - Admin
 
-What has been implemented and verified is in the Claude Doc
-[CSS Design Retrieval: First Draft Implementation](https://claude.ai/artifact/PexMPsfXUHQWNKMZ3tcvkS).
+
 
 ---
 
-## 1. Prerequisites (Windows)
+## 1. Prerequisites (Ubuntu 22.04 / 24.04)
 
-| Need | Install |
+```bash
+sudo apt update
+sudo apt install -y git curl ca-certificates libglib2.0-0     # libglib2.0-0 is needed by opencv-python-headless
+curl -LsSf https://astral.sh/uv/install.sh | sh                # installs uv into ~/.local/bin
+source ~/.bashrc                                               # or open a new shell, so `uv` is on PATH
+uv --version
+uv python install 3.12                                         # uv-managed Python; the system Python is not touched
+```
+
+| Need | Notes |
 |---|---|
-| Python ≥ 3.10 + uv | `winget install astral-sh.uv` (uv brings Python if missing) |
-| Java 17 or 21 (for Neo4j) | nothing to do: if Java is missing or older than 17, `sr neo4j-start` downloads a portable Java 17 runtime into `var\jre` (~46 MB, no admin rights). An installed JDK (`winget install Microsoft.OpenJDK.17`) is used when present |
-| LLM key | one line in `C:\Users\ibpha\work\projects\.env` (any parent folder of the repo works): `OPENAI_API_KEY=...` (`ASTRA_API_KEY` also accepted; add `OPENAI_BASE_URL=...` if the LLM is behind a gateway) |
-| Drawings | PDFs in `..\..\data\all_data\css\pdf` (v1 parsed results in `...\pdf\css_parsed`) |
+| uv | package + environment manager (installed above) |
+| Python 3.12 | managed by uv. Any Python ≥ 3.10 works |
+| Java 17 or 21 (for Neo4j) | nothing to do: if Java is missing or older than 17, `sr neo4j-start` downloads a portable Java 17 runtime into `var/jre` (~46 MB, no sudo). To use a system JDK instead: `sudo apt install -y openjdk-17-jre-headless` |
+| LLM key | in `.env` (see 2.3) |
+| Drawings | PDFs in `../../data/all_data/css/pdf` (v1 parsed results in `.../pdf/css_parsed`), relative to the repo folder. Override with `SR_DATA_DIR` / `SR_V1_DIR` |
+| Network | outbound HTTPS to `dist.neo4j.org` and `api.adoptium.net` (or `github.com`) on the first Neo4j start, plus PyPI and your LLM endpoint |
 
-No docker is used anywhere.
+No docker and no sudo are needed for the app itself. All commands below run from the repo folder.
 
 ## 2. First-time setup
 
-Open PowerShell in the repo folder (`C:\Users\ibpha\work\projects\substation\code\substation_retrieval`):
+### 2.1 Get the code
 
-```powershell
-uv venv
-uv pip install -r requirements.txt
-uv pip install -r requirements-optional.txt     # ezdxf, anthropic, pytest
-uv pip install -e .                             # installs the `sr` command into .venv
-.\.venv\Scripts\activate
-sr neo4j-start      # checks Java, downloads Neo4j Community once (~130 MB) into var\neo4j, sets the password, starts it in the background
-sr neo4j-check      # graph reachable, constraint and index created
-sr import-v1        # loads the 50 reviewed drawings into Neo4j + the RAG index (no LLM cost, ~20 s)
+```bash
+git clone <repo-url> substation_retrieval
+cd substation_retrieval
+git checkout neo4_demo_code
 ```
 
-`sr` is this repo's command-line tool (it is installed into `.venv`; activate the venv first, or use
-`python -m substation_retrieval <command>`).
+### 2.2 Create the uv environment
+
+**Option A: `uv sync` (recommended).** Dependencies come from `pyproject.toml`; versions are pinned in `uv.lock`.
+
+```bash
+uv python pin 3.12          # writes .python-version (once; commit it)
+uv sync --extra all         # creates .venv, installs runtime deps + ezdxf + anthropic + pytest,
+                            # installs this package in editable mode (gives the `sr` command), writes uv.lock
+```
+
+Extras you can pick instead of `all`:
+
+| Extra | Adds | When |
+|---|---|---|
+| `cad` | `ezdxf` | DXF/DWG drawings (DWG also needs ODA File Converter or LibreDWG on PATH) |
+| `anthropic` | `anthropic` | `llm.provider: anthropic` |
+| `dev` | `pytest` | running tests |
+| `ml` | `transformers` | DINOv2 image embeddings (see section 6; torch is installed separately) |
+
+Example: `uv sync --extra cad --extra dev`. Run `uv sync` again after every `git pull`; it only installs what changed.
+Commit `uv.lock` so everyone gets the same versions.
+
+**Option B: requirements files.** Use this if you do not want a lock file.
+
+```bash
+uv venv --python 3.12
+uv pip install -r requirements.txt              # runtime deps
+uv pip install -r requirements-optional.txt     # ezdxf, anthropic, pytest
+uv pip install -e .                             # installs the `sr` command into .venv
+```
+
+`requirements.txt` mirrors `pyproject.toml`. If you add a dependency, put it in both
+(`uv add <pkg>` updates `pyproject.toml` and `uv.lock`; then add the same line to `requirements.txt`).
+
+### 2.3 Configure secrets (`.env`)
+
+```bash
+cp .env.example .env
+chmod 600 .env
+nano .env
+```
+
+Set at least `OPENAI_API_KEY=...` (`ASTRA_API_KEY` also accepted). Add `OPENAI_BASE_URL=...` if the LLM is behind a
+gateway. The app reads `.env` from the repo folder or any parent folder. `.env` is gitignored; never commit it.
+
+### 2.4 Start Neo4j and load the reviewed drawings
+
+```bash
+uv run sr neo4j-start      # checks Java, downloads Neo4j Community once (~130 MB) into var/neo4j, sets the password, starts it
+uv run sr neo4j-check      # graph reachable, constraint and index created
+uv run sr import-v1        # loads the 50 reviewed drawings into Neo4j + the RAG index (no LLM cost, ~20 s)
+uv run sr health           # "llm": {"available": true, ...} confirms the key was picked up
+```
+
+`sr` is this repo's command-line tool. Three equivalent ways to call it:
+
+- `uv run sr <command>` (no activation needed; also syncs the env first)
+- `source .venv/bin/activate` once per shell, then `sr <command>`
+- `python -m substation_retrieval <command>` inside the activated venv
+
+The rest of this README uses plain `sr` and assumes the venv is active.
 
 ## 3. Run (every time)
 
-```powershell
-.\.venv\Scripts\activate
-sr serve              # http://127.0.0.1:8077 ; starts Neo4j by itself if it is not running
+```bash
+uv run sr serve            # UI at http://127.0.0.1:8077 ; starts Neo4j by itself if it is not running
 ```
 
-`sr neo4j-status` shows whether Neo4j is up (with the tail of `var\neo4j\server.log`);
-`sr neo4j-stop` stops it. Neo4j Browser (optional) is at http://127.0.0.1:7474 (user `neo4j`, password from `graph.neo4j_password`). `.\run.ps1` does install + start + first-run import + serve in one go.
+Or activate first: `source .venv/bin/activate`, then `sr serve`.
+
+One-shot alternative: `./run.sh` does install + Neo4j start + first-run import + serve (`chmod +x run.sh` once).
+Extra arguments go to `sr serve`.
+
+**Remote Ubuntu server / VM.** The UI binds to `127.0.0.1` by default. Either tunnel from your laptop:
+
+```bash
+ssh -L 8077:127.0.0.1:8077 <user>@<server>     # then open http://127.0.0.1:8077 locally
+```
+
+or bind to all interfaces with `sr serve --host 0.0.0.0` (port `--port 8077`) and open the port only to trusted IPs
+(`sudo ufw allow from <your-ip> to any port 8077`). The UI has no login, so do not expose it publicly.
+
+**Keep it running after logout:** run it inside `tmux` (`tmux new -s sr`, then `uv run sr serve`, detach with
+`Ctrl-b d`), or as a systemd user service:
+
+```bash
+mkdir -p ~/.config/systemd/user
+cat > ~/.config/systemd/user/substation-retrieval.service <<UNIT
+[Unit]
+Description=substation_retrieval UI
+After=network-online.target
+
+[Service]
+WorkingDirectory=$(pwd)
+ExecStart=$(pwd)/.venv/bin/sr serve
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
+UNIT
+systemctl --user daemon-reload
+systemctl --user enable --now substation-retrieval
+loginctl enable-linger $USER          # keep user services running when you are logged out
+journalctl --user -u substation-retrieval -f
+```
+
+Other run-time commands:
+
+| Command | What it does |
+|---|---|
+| `sr neo4j-status` | whether Neo4j is up, with the tail of `var/neo4j/server.log` |
+| `sr neo4j-stop` | stops Neo4j |
+| `uv run pytest` | test suite (synthetic data, no network) |
+
+Neo4j Browser (optional) is at http://127.0.0.1:7474 (user `neo4j`, password from `graph.neo4j_password`).
 
 ## 4. Extract drawings with the LLM (extraction v2)
 
-```powershell
+```bash
 sr health                                                  # "llm": {"available": true, ...}
-sr extract "..\..\data\all_data\css\pdf\CSS layout 10.02.25.pdf" --out var\test_v2.json   # one drawing, not indexed
+sr extract "../../data/all_data/css/pdf/CSS layout 10.02.25.pdf" --out var/test_v2.json   # one drawing, not indexed
 sr extract-all --workers 4                                 # all PDFs in paths.data_dir, report vs v1
 sr extract-all --workers 4 --index                         # same, and replace the v1 entries in the graph + index
 ```
 
 What `extract-all` writes:
 
-- `var\extractions\<doc_id>\doc.json` for each drawing
-- debug artifacts in `var\artifacts\<doc_id>\`: page renders, layout crops, overlays, `masks\*.png`, raw LLM JSON
-- a comparison CSV in `var\reports\extract_v2_<time>.csv`, covering substations, equipment, transformers,
+- `var/extractions/<doc_id>/doc.json` for each drawing
+- debug artifacts in `var/artifacts/<doc_id>/`: page renders, layout crops, overlays, `masks/*.png`, raw LLM JSON
+- a comparison CSV in `var/reports/extract_v2_<time>.csv`, covering substations, equipment, transformers,
   room L/W, clear height, scale source, section and kVA (v2 vs v1)
 
 LLM answers are cached by file hash + prompt version, so re-runs only pay for what changed.
 
 Adding new drawings later, one at a time or in bulk:
 
-```powershell
-sr ingest "D:\new_drawings\Site A.pdf" --no-v1 --wait   # --no-v1 forces the LLM even if a v1 result exists
-sr ingest "D:\new_drawings" --no-v1 --wait              # a whole folder
+```bash
+sr ingest ~/new_drawings/"Site A.pdf" --no-v1 --wait   # --no-v1 forces the LLM even if a v1 result exists
+sr ingest ~/new_drawings --no-v1 --wait              # a whole folder
 ```
 
 You can also use the UI: **Library & ingest → choose files → untick "reuse v1 extraction" → Upload & ingest**.
@@ -121,20 +229,20 @@ Each file is a job: extract → review gate → Neo4j upsert → RAG upsert → 
 
 ## 6. Optional: DINOv2 image embeddings (tiny variant)
 
-```powershell
+```bash
 uv pip install torch --index-url https://download.pytorch.org/whl/cpu   # CPU-only torch (~200 MB)
 uv pip install -r requirements-ml.txt                                   # transformers
-sr setup-embedder        # saves facebook/dinov2-small (ViT-S/14, 22M params) to var\models
+sr setup-embedder        # saves facebook/dinov2-small (ViT-S/14, 22M params) to var/models
 sr rebuild               # embeds every substation's mask raster (no LLM)
 ```
 
 The setting is `engines.rag.image_embedder: auto`: the embedder switches on only after `sr setup-embedder` has saved
-the model into `var\models`. Until then nothing imports torch or transformers, so a missing or broken ML install
+the model into `var/models`. Until then nothing imports torch or transformers, so a missing or broken ML install
 cannot stop the app.
 
 ## 7. Configuration
 
-`config\settings.yaml` holds all knobs. Environment variables override them:
+`config/settings.yaml` holds all knobs. Environment variables override them:
 
 | Setting | Env var | Default |
 |---|---|---|
@@ -143,21 +251,21 @@ cannot stop the app.
 | retrieval mode | `SR_RETRIEVAL_MODE` | `auto` (`kg`, `rag`, `both`) |
 | engines on/off | `CSS_KG_ENABLED`, `CSS_RAG_ENABLED` | `true` |
 | LLM model / style | `SR_LLM_MODEL`, `SR_LLM_API_STYLE` | `gpt-6-astra` (model id), `responses` (`chat` for gateways) |
-| drawings / v1 / workspace | `SR_DATA_DIR`, `SR_V1_DIR`, `SR_VAR_DIR` | `..\..\data\all_data\css\pdf`, `...\css_parsed`, `.\var` |
+| drawings / v1 / workspace | `SR_DATA_DIR`, `SR_V1_DIR`, `SR_VAR_DIR` | `../../data/all_data/css/pdf`, `.../css_parsed`, `./var` |
 
 The scoring weights, verdict thresholds (0.80 / 0.60), plot-clearance norms and catalogue tolerances are also in
 `settings.yaml`.
 
-## 8. Workspace (`var\`, gitignored)
+## 8. Workspace (`var/`, gitignored)
 
 | Path | Content |
 |---|---|
-| `var\neo4j\` | Neo4j install + its data (`data`), logs (`logs`, `server.log`) |
-| `var\db\index.sqlite` | document registry, RAG index (features, mask rasters, text, image embeddings), index versions |
-| `var\db\jobs.sqlite` | ingest job queue |
-| `var\extractions\<doc_id>\doc.json` | schema-2.1 extraction per drawing (source of truth for `sr rebuild`) |
-| `var\artifacts\<doc_id>\` | page renders, crops, overlays, masks, raw LLM JSON |
-| `var\cache\llm\`, `var\models\`, `var\reports\` | LLM cache, DINOv2 weights, extraction reports |
+| `var/neo4j/` | Neo4j install + its data (`data`), logs (`logs`, `server.log`) |
+| `var/db/index.sqlite` | document registry, RAG index (features, mask rasters, text, image embeddings), index versions |
+| `var/db/jobs.sqlite` | ingest job queue |
+| `var/extractions/<doc_id>/doc.json` | schema-2.1 extraction per drawing (source of truth for `sr rebuild`) |
+| `var/artifacts/<doc_id>/` | page renders, crops, overlays, masks, raw LLM JSON |
+| `var/cache/llm/`, `var/models/`, `var/reports/` | LLM cache, DINOv2 weights, extraction reports |
 
 ## 9. Commands
 
@@ -165,7 +273,7 @@ The scoring weights, verdict thresholds (0.80 / 0.60), plot-clearance norms and 
 sr serve | import-v1 | ingest PATH... [--wait] [--no-v1] [--force] | extract FILE | extract-all [--workers N] [--index]
 sr rebuild [--rag-only] | search "TEXT" [--mode hybrid|kg|rag|auto|both] | jobs | health | versions | setup-embedder | worker
 sr neo4j-start | neo4j-status | neo4j-stop | neo4j-check
-python -m pytest        # 18 tests, synthetic data, no network
+uv run pytest           # 18 tests, synthetic data, no network
 ```
 
 ## 10. Troubleshooting
@@ -173,11 +281,11 @@ python -m pytest        # 18 tests, synthetic data, no network
 | Symptom | Fix |
 |---|---|
 | `Neo4j at bolt://localhost:7687 is not reachable` | `sr neo4j-start`; if it fails, `sr neo4j-status` shows the Java version and the server log tail |
-| `Java not found` and the portable download fails | `winget install Microsoft.OpenJDK.17`, open a new terminal (or set `JAVA_HOME`) |
+| `Java not found` and the portable download fails | `sudo apt install -y openjdk-17-jre-headless`, open a new shell (or set `JAVA_HOME`) |
 | `"llm": {"available": false}` | the key line is missing in `.env`; check the name `OPENAI_API_KEY` (or `ASTRA_API_KEY`) |
 | LLM 404 / connection error | set `OPENAI_BASE_URL` for your gateway, or `SR_LLM_API_STYLE=chat` |
 | Search says "fallback to RAG" | expected when the query is thin, or Neo4j is down; see the trace line |
-| Masks / drawing views say "no image" | for v1 drawings, `SR_V1_DIR` must point at `css_parsed`; for v2, keep `var\artifacts` |
+| Masks / drawing views say "no image" | for v1 drawings, `SR_V1_DIR` must point at `css_parsed`; for v2, keep `var/artifacts` |
 
 ## Layout
 

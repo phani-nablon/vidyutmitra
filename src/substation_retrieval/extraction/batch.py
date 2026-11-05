@@ -39,8 +39,9 @@ def run(services, pdf_dir: Path, workers: int = 4, limit: int | None = None, ind
     files = sorted(p for p in Path(pdf_dir).iterdir() if p.suffix.lower() in (".pdf", ".dxf", ".dwg"))
     if limit:
         files = files[:limit]
-    if not services.llm.available:
-        raise RuntimeError("No LLM key found (OPENAI_API_KEY / ASTRA_API_KEY in .env); refusing to run text-only extraction")
+    cache_only = not services.llm.available
+    if cache_only:
+        log("No LLM key (OPENAI_API_KEY / ASTRA_API_KEY): replaying var/cache/llm; drawings without cached replies are skipped")
     ex = services.ingest.extractor
     v1_dir = s.path("paths.v1_parsed_dir")
     report = s.var("reports", f"extract_v2_{time.strftime('%Y%m%d_%H%M%S')}.csv")
@@ -51,6 +52,9 @@ def run(services, pdf_dir: Path, workers: int = 4, limit: int | None = None, ind
         row = {"file": p.name}
         try:
             sha = sha256_file(p)
+            if cache_only and not services.llm.cached(sha):
+                row.update({"status": "skipped", "error": "no LLM key and no cached replies", "seconds": 0.0})
+                return row
             doc = ex.extract(p, sha)
             doc["source"]["path"] = str(p)
             jp = services.ingest.doc_path(doc["doc_id"])

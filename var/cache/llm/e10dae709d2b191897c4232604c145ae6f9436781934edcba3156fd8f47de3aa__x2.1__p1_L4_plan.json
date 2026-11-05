@@ -1,0 +1,1 @@
+{"model": "gpt-6-astra", "output": {"room": {"polygon": null, "length_mm": null, "width_mm": null, "overall_dims_text": null, "shape": null}, "dimensions": [{"value_mm": 600, "p1": [786, 54], "p2": [786, 143], "text": "600"}], "equipment": [], "openings": [], "cutouts": [], "beams": [], "columns": [], "trenches": [], "cable_trays": [], "clearances": []}}
